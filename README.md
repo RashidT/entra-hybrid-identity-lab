@@ -62,32 +62,43 @@ CSV Data Path: C:\poshlog\users.csv formatted with headers:
 Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password
 
 ## Quick Start Guide
-1. Initialize Active Directory & Configure UPN Suffixes
+### 1. Initialize Active Directory & Configure UPN Suffixes
 Execute the foundational deployment and configure your verified Entra domain UPN suffix:
 
 ```PowerShell
+# 01 - Install AD DS Forest and Domain
+# Description: Installs Active Directory Domain Services, creates the forest, and promotes the server to a domain controller.
 .\scripts\01-Install-ADDS.ps1
+
+# 02 - Configure UPN Suffixes
+# Description: Configures and registers custom verified domain UPN suffixes to align with Microsoft Entra ID.
 .\scripts\02-Configure-UPN.ps1
 ```
-2. Bulk Import Users and Dynamic Department Sub-OUs
+### 2. Bulk Import Users and Dynamic Department Sub-OUs
 Run the bulk import script to automatically create the root CorpUsers container, dynamic department sub-OUs (OU=Finance, OU=Engineering, etc.), construct full display names, and provision security groups:
 
 ```PowerShell
+# 03 - Bulk Import Users and Dynamic Department Sub-OUs
+# Description: Parses CSV user records, creates dynamic department sub-OUs under CorpUsers, and provisions user accounts.
 .\scripts\03-BulkImport-Users.ps1
 ```
-3. Update Existing User Attributes and Sub-OU Placement
+### 3. Update Existing User Attributes and Sub-OU Placement
 To apply structural updates, propagate naming standard changes, or relocate existing accounts into their proper department sub-containers uniformly:
 
 ```PowerShell
+# 05 - Update Existing User Attributes and Sub-OU Placement
+# Description: Propagates naming standard updates, attribute changes, and relocates existing accounts into proper sub-OUs.
 .\scripts\05-Update-ADUsers.ps1
 ```
-4. Run Infrastructure Validation Tests
+### 4. Run Infrastructure Validation Tests
 Verify Active Directory health, group memberships, OU hierarchy, and CSV user parity using Pester:
 
 ```PowerShell
+# IdentityLab - Pester Infrastructure Validation Suite
+# Description: Automated unit tests to validate Active Directory health, group memberships, OU hierarchy, and CSV user attribute parity.
 Invoke-Pester -Path .\tests\IdentityLab.Tests.ps1 -Output Detailed
 ```
-Verification Commands
+### Verification Commands
 To verify that user display names and attributes are correctly populated across Active Directory:
 
 ```PowerShell
