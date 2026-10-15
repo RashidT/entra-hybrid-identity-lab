@@ -1,24 +1,24 @@
-Hybrid Identity & Entra ID UPN Synchronization Lab
-Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and Pester infrastructure validation tests.
+# Hybrid Identity & Entra ID UPN Synchronization Lab
 
-Overview
+> **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and Pester infrastructure validation tests.**
+
+## Overview
 This repository provides a production-grade, automated infrastructure framework for building, configuring, and validating a hybrid identity environment. Designed for identity and access management (IAM) engineers, administrators, and professionals preparing for certifications like the Microsoft SC-300, this lab bridges on-premises Active Directory Domain Services (AD DS) with Microsoft Entra ID.
 
 The lab utilizes modular, repeatable PowerShell scripts to automate the entire deployment lifecycle—from foundational forest and domain creation to User Principal Name (UPN) suffix routing, dynamic department sub-OU provisioning, bulk user and security group creation, and attribute synchronization updates. Infrastructure health and configuration compliance are continuously verified using automated Pester unit test suites.
 
-Key Features & Capabilities
-Automated Active Directory Deployment: Streamlined installation of AD DS, domain configuration, and hierarchical OU management (CorpUsers, department sub-containers like Finance, Engineering, Sales, and Groups).
+## Key Features & Capabilities
+* **Automated Active Directory Deployment:** Streamlined installation of AD DS, domain configuration, and hierarchical OU management (`CorpUsers`, department sub-containers like `Finance`, `Engineering`, `Sales`, and `Groups`).
+* **Entra-Ready UPN Suffix Management:** Configures and maps verified custom domain UPN suffixes (`@yourdomain.onmicrosoft.com`) to eliminate default `.local` routing issues during hybrid synchronization.
+* **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses CSV datasets (`C:\poshlog\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
+* **Hybrid Identity Synchronization:** Configures local Microsoft Entra Connect Cloud Sync agents (`AADConnectProvisioningAgent`) to establish secure cloud-to-on-prem directory synchronization.
+* **Infrastructure Testing with Pester:** Includes automated test suites (`tests/IdentityLab.Tests.ps1`) to validate Active Directory health, group memberships, user attribute formatting, and CSV record parity.
 
-Entra-Ready UPN Suffix Management: Configures and maps verified custom domain UPN suffixes (@yourdomain.onmicrosoft.com) to eliminate default .local routing issues during hybrid synchronization.
+---
 
-Repeatable & Safe-to-Rerun Bulk User & Group Provisioning: Parses CSV datasets (C:\poshlog\users.csv) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups ($Dept-Security-Group) without creating duplicates if run multiple times.
+## Architecture Overview
 
-Hybrid Identity Synchronization: Configures local Microsoft Entra Connect Cloud Sync agents (AADConnectProvisioningAgent) to establish secure cloud-to-on-prem directory synchronization.
-
-Infrastructure Testing with Pester: Includes automated test suites (tests/IdentityLab.Tests.ps1) to validate Active Directory health, group memberships, user attribute formatting, and CSV record parity.
-
-Architecture Overview
-Plaintext
+```text
 +-------------------------------------------------------------------+
 |                        Local Hyper-V Host                         |
 |                                                                   |
