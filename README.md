@@ -37,18 +37,22 @@ graph TD
 
 ```text
 entra-hybrid-identity-lab/
+├── .github/
+│   └── workflows/
+│       └── pester-tests.yml   # Automated GitHub Actions CI/CD test pipeline
 ├── docs/
-│   └── architecture.md
+│   ├── architecture.md
+│   └── images/                # Screenshots and visual assets directory
 ├── scripts/
 │   ├── 01-Install-ADDS.ps1
 │   ├── 02-Configure-UPN.ps1
 │   ├── 03-BulkImport-Users.ps1
-│   ├── 04-Create-Groups.ps1
+│   ├── 04-Install-CloudSyncAgent.ps1
 │   └── 05-Update-ADUsers.ps1
 ├── tests/
 │   └── IdentityLab.Tests.ps1
 ├── data/
-│   └── users.csv          # Sample CSV dataset (Press Ctrl+F to replace your domain)
+│   └── users.csv          	# Sample CSV dataset (Press Ctrl+F to replace your domain)
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -56,7 +60,7 @@ entra-hybrid-identity-lab/
 ## Prerequisites & Requirements 
 Operating System: Windows Server 2022 or Windows 11 Enterprise (Hyper-V enabled).
 
-Permissions: Local Administrator rights on the target domain controller / management workstation.
+Permissions: Local Administrator rights on the target domain controller/management workstation.
 
 Modules Required: ActiveDirectory, Pester (v6.2.0+).
 
@@ -77,14 +81,16 @@ Execute the foundational deployment and configure your verified Entra domain UPN
 # Description: Configures and registers custom verified domain UPN suffixes to align with Microsoft Entra ID.
 .\scripts\02-Configure-UPN.ps1
 ```
-### 2. Bulk Import Users and Dynamic Department Sub-OUs
-Run the bulk import script to automatically create the root CorpUsers container, dynamic department sub-OUs (OU=Finance, OU=Engineering, etc.), construct full display names, and provision security groups:
+### 2. Bulk Import Users and Provision Department Security Groups
+Run the bulk import script to automatically create the root `CorpUsers` container, dynamic department sub-OUs (`OU=Finance`, `OU=Engineering`, etc.), construct full display names, and provision department-aligned security groups:
 
-```PowerShell
-# 03 - Bulk Import Users and Dynamic Department Sub-OUs
-# Description: Parses CSV user records, creates dynamic department sub-OUs under CorpUsers, and provisions user accounts.
+```powershell
+# 03 - Bulk Import Users, Department Sub-OUs, and Security Groups
+# Description: Parses CSV user records, creates dynamic department sub-OUs under CorpUsers, provisions user accounts, and creates security groups with group memberships.
 .\scripts\03-BulkImport-Users.ps1
 ```
+Verification: Run `Get-ADGroup -Filter "Name -like '*-Security-Group'"` in PowerShell to confirm all department-aligned security groups were successfully provisioned.
+
 ### 3. Update Existing User Attributes and Sub-OU Placement
 To apply structural updates, propagate naming standard changes, or relocate existing accounts into their proper department sub-containers uniformly:
 

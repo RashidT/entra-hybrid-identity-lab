@@ -43,18 +43,18 @@ DC=rtworks,DC=local
 
 `OU=CorpUsers`: The primary root container established to isolate lab user objects from built-in system containers.
 
-## Department Sub-OUs ##: Dynamic departmental containers (`OU=IT`, `OU=HR`, `OU=Finance`, `OU=Sales`, `OU=Marketing`, `OU=Engineering`, `OU=Operations`, `OU=Legal`, `OU=Product`, `OU=Customer Support`) that house user accounts based on their CSV department attributes.
+**Department Sub-OUs** : Dynamic departmental containers (`OU=IT`, `OU=HR`, `OU=Finance`, `OU=Sales`, `OU=Marketing`, `OU=Engineering`, `OU=Operations`, `OU=Legal`, `OU=Product`, `OU=Customer Support`) that house user accounts based on their CSV department attributes.
 
 ## 4. Hybrid Identity & Synchronization Architecture
-# A. UPN Routing Strategy
-On-Premises Suffix (`.local`): Used strictly for internal domain services and Kerberos authentication.
+ **A. UPN Routing Strategy**
+	**On-Premises Suffix** (`.local`): Used strictly for internal domain services and Kerberos authentication.
 
-Cloud Verified Suffix (`.onmicrosoft.com / Custom Domain`): Registered as an alternative UPN suffix in Active Directory. User principal names are formatted as `samaccountname@yourdomain.onmicrosoft.com` to ensure seamless routing and sign-in across the hybrid boundary.
+	**Cloud Verified Suffix** (`.onmicrosoft.com` / **Custom Domain**): Registered as an alternative UPN suffix in Active Directory. User principal names are formatted as `samaccountname@yourdomain.onmicrosoft.com` to ensure seamless routing and sign-in across the hybrid boundary.
 
-# B. Microsoft Entra Connect Cloud Sync
-Agent Model: Utilizes lightweight provisioning agents (`AADConnectProvisioningAgent`) installed locally to connect outbound via TLS/HTTPS (Port 443) directly to the Entra service.
+ **B. Microsoft Entra Connect Cloud Sync**
+	**Agent Model**: Utilizes lightweight provisioning agents (`AADConnectProvisioningAgent`) installed locally to connect outbound via TLS/HTTPS (Port 443) directly to the Entra service.
 
-Provisioning Scope: Synchronizes objects originating from the `CorpUsers` OU hierarchy up to the Microsoft Entra tenant, propagating attributes such as `DisplayName`, `Department`, `Title`, and `Office`.
+	**Provisioning Scope:** Synchronizes objects originating from the `CorpUsers` OU hierarchy up to the Microsoft Entra tenant, propagating attributes such as `DisplayName`, `Department`, `Title`, and `Office`.
 
 ## 5. Infrastructure Validation & Compliance
 Configuration drift and infrastructure integrity are continuously validated using an automated Pester test framework (`tests/IdentityLab.Tests.ps1`), which asserts:
