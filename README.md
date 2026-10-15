@@ -33,8 +33,9 @@ graph TD
     style Sync fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
     style Entra fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
   ```
-Repository Structure
-Plaintext
+## Repository Structure
+
+```text
 entra-hybrid-identity-lab/
 ├── docs/
 │   └── architecture.md
@@ -49,7 +50,8 @@ entra-hybrid-identity-lab/
 ├── C:\poshlog\
 │   └── users.csv
 └── README.md
-Prerequisites & Requirements
+```
+## Prerequisites & Requirements 
 Operating System: Windows Server 2022 or Windows 11 Enterprise (Hyper-V enabled).
 
 Permissions: Local Administrator rights on the target domain controller / management workstation.
@@ -59,34 +61,39 @@ Modules Required: ActiveDirectory, Pester (v6.2.0+).
 CSV Data Path: C:\poshlog\users.csv formatted with headers:
 Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password
 
-Quick Start Guide
+## Quick Start Guide
 1. Initialize Active Directory & Configure UPN Suffixes
 Execute the foundational deployment and configure your verified Entra domain UPN suffix:
 
-PowerShell
+```PowerShell
 .\scripts\01-Install-ADDS.ps1
 .\scripts\02-Configure-UPN.ps1
+```
 2. Bulk Import Users and Dynamic Department Sub-OUs
 Run the bulk import script to automatically create the root CorpUsers container, dynamic department sub-OUs (OU=Finance, OU=Engineering, etc.), construct full display names, and provision security groups:
 
-PowerShell
+```PowerShell
 .\scripts\03-BulkImport-Users.ps1
+```
 3. Update Existing User Attributes and Sub-OU Placement
 To apply structural updates, propagate naming standard changes, or relocate existing accounts into their proper department sub-containers uniformly:
 
-PowerShell
+```PowerShell
 .\scripts\05-Update-ADUsers.ps1
+```
 4. Run Infrastructure Validation Tests
 Verify Active Directory health, group memberships, OU hierarchy, and CSV user parity using Pester:
 
-PowerShell
+```PowerShell
 Invoke-Pester -Path .\tests\IdentityLab.Tests.ps1 -Output Detailed
+```
 Verification Commands
 To verify that user display names and attributes are correctly populated across Active Directory:
 
-PowerShell
+```PowerShell
 Get-ADUser -Filter * -SearchBase "OU=CorpUsers,DC=yourdomain,DC=local" -Properties DisplayName, Department | Format-Table SamAccountName, Name, DisplayName, Department -AutoSize
-Reference & Learning Resources
+```
+## Reference & Learning Resources
 This lab builds upon core Microsoft hybrid identity deployment patterns. For official documentation on setting up the foundational Active Directory and cloud sync architecture, refer to:
 
 Microsoft Tutorial: Basic Active Directory and Entra Connect Cloud Sync
