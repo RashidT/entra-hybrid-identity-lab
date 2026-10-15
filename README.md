@@ -18,22 +18,21 @@ The lab utilizes modular, repeatable PowerShell scripts to automate the entire d
 
 ## Architecture Overview
 
-```text
-+-------------------------------------------------------------------+
-|                        Local Hyper-V Host                         |
-|                                                                   |
-|   +-----------------------+         +-------------------------+   |
-|   | Active Directory DC   |         | Entra Connect Sync Agent|   |
-|   | Domain: yourdomain.local------->| Provisioning Agent      |   |
-|   | UPN Suffixes Configured|        +-------------------------+   |
-|   +-----------------------+                      |                |
-+--------------------------------------------------|----------------+
-                                                   | TLS / HTTPS
-                                                   v
-                                      +-------------------------+
-                                      | Microsoft Entra Tenant  |
-                                      | yourdomain.onmicrosoft.com|
-                                      +-------------------------+
+```mermaid
+graph TD
+    subgraph Host ["Local Hyper-V Host"]
+        AD["Active Directory DC<br/>Domain: yourdomain.local<br/>UPN Suffixes Configured"]
+        Sync["Entra Connect Sync Agent<br/>Provisioning Agent"]
+        AD -->|Syncs Users & Groups| Sync
+    end
+
+    Sync -->|"TLS / HTTPS (Cloud Sync)"| Entra["Microsoft Entra Tenant<br/>yourdomain.onmicrosoft.com"]
+
+    style Host fill:#f9f9f9,stroke:#333,stroke-width:2px
+    style AD fill:#e1f5fe,stroke:#01579b,stroke-width:1px
+    style Sync fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
+    style Entra fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
+  ```
 Repository Structure
 Plaintext
 entra-hybrid-identity-lab/
