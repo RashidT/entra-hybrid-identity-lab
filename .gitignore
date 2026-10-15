@@ -1,0 +1,21 @@
+﻿# PowerShell and Local Log Files
+*.log
+transcript/
+poshlog/
+
+# Pester Test Results & XML Reports
+testResults.xml
+TestResults/
+
+# Editor and IDE Settings (VS Code / Visual Studio)
+.vscode/
+.vs/
+*.suo
+*.user
+*.sln
+
+# Operating System Junk Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

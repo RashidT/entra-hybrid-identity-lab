@@ -1,0 +1,30 @@
+name: Script Validation & Syntax Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-scripts:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Script Analyzer
+        shell: powershell
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path ./scripts -Recurse
+          if ($results) {
+              $results | Format-Table
+              exit 1
+          }
+
+      - name: Run Pester Syntax Check
+        shell: powershell
+        run: |
+          Install-Module Pester -Force -Scope CurrentUser
+          Invoke-Pester -Path ./tests -Passthru
