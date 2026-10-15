@@ -3,7 +3,7 @@
     Pester v6 test suite for validating the Hybrid Identity & Entra ID Lab environment.
 .DESCRIPTION
     Dynamically validates CSV parity, Active Directory module availability, CorpUsers root OU, 
-    department sub-OUs, security groups, and user attribute formatting (UPN, DisplayName, OU placement).
+    all 10 department sub-OUs, security groups, and user attribute formatting (UPN, DisplayName, OU placement).
 #>
 
 Describe "Hybrid Identity Lab - Active Directory Infrastructure Validation" {
@@ -28,7 +28,8 @@ Describe "Hybrid Identity Lab - Active Directory Infrastructure Validation" {
             $OU.Name | Should -Be "CorpUsers"
         }
 
-        $Departments = @("Finance", "Engineering", "Sales")
+        # Updated to include all 10 department sub-OUs
+        $Departments = @("IT", "HR", "Finance", "Sales", "Marketing", "Engineering", "Operations", "Legal", "Product", "Customer Support")
         foreach ($DeptName in $Departments) {
             It "Should contain the department sub-OU: <DeptName> under CorpUsers" -ForEach @(@{DeptName = $DeptName}) {
                 param($DeptName)
@@ -44,7 +45,8 @@ Describe "Hybrid Identity Lab - Active Directory Infrastructure Validation" {
     }
 
     Context "Department Security Groups" {
-        $Departments = @("Finance", "Engineering", "Sales")
+        # Updated to include all 10 department security groups
+        $Departments = @("IT", "HR", "Finance", "Sales", "Marketing", "Engineering", "Operations", "Legal", "Product", "Customer Support")
         
         foreach ($GrpDept in $Departments) {
             It "Should contain the security group: <GrpDept>-Security-Group" -ForEach @(@{GrpDept = $GrpDept}) {
