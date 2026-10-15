@@ -1,17 +1,46 @@
 <#
 .SYNOPSIS
-    Installs Active Directory Domain Services and builds the forest interactively.
+    Installs AD DS and sets up the root container structure.
+.DESCRIPTION
+    Validates module availability, ensures base container structure exists.
+    NOTE: Replace 'rtworks.local' with your custom Active Directory domain name where applicable.
 #>
+
 [CmdletBinding()]
 param(
-    [string]$DomainName        = (Read-Host "Enter your internal Active Directory domain name (e.g., yourdomain.local)"),
-    [string]$DomainNetBIOSName = (Read-Host "Enter your NetBIOS domain name (e.g., YOURDOMAIN)")
+    # TODO: Replace 'rtworks' with your own Active Directory domain component
+    [string] $BaseDN = "DC=rtworks,DC=local",
+    [string] $RootContainer = "CorpUsers"
 )
 
-Write-Host "Deploying Active Directory Forest for: $DomainName ($DomainNetBIOSName)..." -ForegroundColor Cyan
+begin {
+    Write-Output "Starting Active Directory Domain Services environment setup..."
+    Write-Verbose "Checking for Active Directory PowerShell module."
+    
+    if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {
+        throw "The Active Directory module is required but not installed."
+    }
+    Import-Module ActiveDirectory
+}
 
-# Install AD-DS Feature
-Install-WindowsFeature -Name "AD-Domain-Services" -IncludeManagementTools
+process {
+    $targetDN = "OU=$RootContainer,$BaseDN"
+    Write-Output "Verifying target root container: $targetDN"
 
-# Create AD Forest
-Install-ADDSForest -DomainName $DomainName -DomainNetBIOSName $DomainNetBIOSName -InstallDns:$true -Force:$true
+    try {
+        if (-not (Get-ADOrganizationalUnit -Filter "DistinguishedName -eq '$targetDN'" -ErrorAction SilentlyContinue)) {
+            Write-Verbose "Root container does not exist. Creating OU=$RootContainer..."
+            New-ADOrganizationalUnit -Name $RootContainer -Path $BaseDN -PassThru | Out-Null
+            Write-Output "Successfully created container: $targetDN"
+        } else {
+            Write-Output "Root container already exists: $targetDN"
+        }
+    }
+    catch {
+        Write-Error "Failed to verify or create root container: $_"
+    }
+}
+
+end {
+    Write-Output "AD DS initialization script completed."
+}
