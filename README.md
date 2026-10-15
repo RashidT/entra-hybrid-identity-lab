@@ -89,7 +89,7 @@ Run the bulk import script to automatically create the root `CorpUsers` containe
 # Description: Parses CSV user records, creates dynamic department sub-OUs under CorpUsers, provisions user accounts, and creates security groups with group memberships.
 .\scripts\03-BulkImport-Users.ps1
 ```
-Verification: Run ```PowershellGet-ADGroup -Filter "Name -like '*-Security-Group'" ``` in PowerShell to confirm all department-aligned security groups were successfully provisioned.
+Verification: Run `Get-ADGroup -Filter "Name -like '*-Security-Group'"` in PowerShell to confirm all department-aligned security groups were successfully provisioned.
 
 ### 3. Update Existing User Attributes and Sub-OU Placement
 To apply structural updates, propagate naming standard changes, or relocate existing accounts into their proper department sub-containers uniformly:
