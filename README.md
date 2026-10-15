@@ -69,7 +69,8 @@ Execute the foundational deployment and configure your verified Entra domain UPN
 # 01 - Install AD DS Forest and Domain
 # Description: Installs Active Directory Domain Services, creates the forest, and promotes the server to a domain controller.
 .\scripts\01-Install-ADDS.ps1
-
+```
+```PowerShell
 # 02 - Configure UPN Suffixes
 # Description: Configures and registers custom verified domain UPN suffixes to align with Microsoft Entra ID.
 .\scripts\02-Configure-UPN.ps1
