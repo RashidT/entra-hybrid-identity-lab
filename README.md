@@ -47,8 +47,10 @@ entra-hybrid-identity-lab/
 │   └── 05-Update-ADUsers.ps1
 ├── tests/
 │   └── IdentityLab.Tests.ps1
-├── C:\poshlog\
-│   └── users.csv
+├── data/
+│   └── users.csv          # Sample CSV dataset (Press Ctrl+F to replace your domain)
+├── .gitignore
+├── LICENSE
 └── README.md
 ```
 ## Prerequisites & Requirements 
