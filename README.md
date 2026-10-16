@@ -1,6 +1,6 @@
 # Hybrid Identity & Entra ID UPN Synchronization Lab
 
-**Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and comprehensive Pester v6 infrastructure validation tests.**
+> **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and comprehensive Pester v6 infrastructure validation tests.**
 
 ## Overview
 This repository provides a production-grade, automated infrastructure framework for building, configuring, and validating a hybrid identity environment. Designed for identity and access management (IAM) engineers, administrators, and professionals preparing for certifications like the Microsoft SC-300, this lab bridges on-premises Active Directory Domain Services (AD DS) with Microsoft Entra ID.
@@ -9,7 +9,7 @@ The lab utilizes modular, repeatable PowerShell scripts to automate the entire d
 
 ## Key Features & Capabilities
 - **Automated Active Directory Deployment:** Streamlined installation of AD DS, domain configuration, and hierarchical OU management (`CorpUsers`, and all 10 departmental sub-containers like `IT`, `HR`, `Finance`, `Sales`, `Marketing`, `Engineering`, `Operations`, `Legal`, `Product`, and `Customer Support`).
-- **Entra-Ready UPN Suffix Management:** Configures and maps verified custom domain UPN suffixes (`@yourdomain.onmicrosoft.com`) to eliminate default `.local` routing issues during hybrid synchronization.
+- **Entra-Ready UPN Suffix Management:** Configures and maps verified custom domain UPN suffixes (`@yourdomain.onmicrosoft.com`) via mandatory runtime parameters to eliminate default `.local` routing issues during hybrid synchronization.
 - **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses CSV datasets (`C:\poshlog\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
 - **Automated Department Transfers & Migrations:** Repeat-safe attribute updating scripts (`05-Update-ADUsers.ps1`) that detect department changes, dynamically move user objects across sub-OUs, and update security group memberships.
 - **Hybrid Identity Synchronization:** Configures local Microsoft Entra Connect Cloud Sync agents (`AADConnectProvisioningAgent`) to establish secure cloud-to-on-prem directory synchronization.
@@ -70,16 +70,16 @@ entra-hybrid-identity-lab/
     
 -   **Permissions:** Local Administrator rights on the target domain controller/management workstation.
     
--   **Modules Required:**  `ActiveDirectory`,  `Pester` (v6.2.0+).
+-   **Modules Required:** `ActiveDirectory`, `Pester` (v6.2.0+).
     
--   **CSV Data Path:**  `C:\poshlog\users.csv` formatted with headers:`Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password`
+-   **CSV Data Path:** `C:\poshlog\users.csv` formatted with headers: `Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password`
     
 
 ## Quick Start Guide
 
 ### 1. Initialize Active Directory & Configure UPN Suffixes
 
-Execute the foundational deployment script, then run Script 02 passing your verified Microsoft Entra tenant domain via the mandatory -CustomUpnSuffix parameter:
+Execute the foundational deployment script, then run Script 02 supplying your verified Microsoft Entra tenant domain to the mandatory `-CustomUpnSuffix` parameter:
 
 Code snippet
 
@@ -92,22 +92,20 @@ Code snippet
 Code snippet
 
 ```
-
 # 02 - Configure UPN Suffixes
-# Note: Pass your verified domain (e.g., yourdomain.onmicrosoft.com) to the mandatory -CustomUpnSuffix parameter
 .\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix "yourdomain.onmicrosoft.com"
 
 ```
 
 ### 2. Bulk Import Users and Provision Department Security Groups
 
-Run the bulk import script to automatically create the root `CorpUsers` container, all 10 dynamic department sub-OUs, construct full display names, and provision department-aligned security groups:
+Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters:
 
 PowerShell
 
 ```
 # 03 - Bulk Import Users, Department Sub-OUs, and Security Groups
-.\scripts\03-BulkImport-Users.ps1
+.\scripts\03-BulkImport-Users.ps1 -EntraDomain "yourdomain.onmicrosoft.com" -RootTargetOU "OU=CorpUsers,DC=rtworks,DC=local"
 
 ```
 
@@ -116,13 +114,13 @@ PowerShell
 
 ### 3. Update Existing User Attributes and Sub-OU Placement
 
-To apply repeat-safe updates, propagate naming standard changes, or automatically relocate existing accounts into their proper department sub-containers uniformly:
+To apply repeat-safe updates, propagate naming standard changes, or automatically relocate existing accounts into their proper department sub-containers uniformly, supply your target root OU:
 
 Code snippet
 
 ```
 # 05 - Update Existing User Attributes and Sub-OU Placement
-.\scripts\05-Update-ADUsers.ps1
+.\scripts\05-Update-ADUsers.ps1 -RootTargetOU "OU=CorpUsers,DC=rtworks,DC=local"
 
 ```
 

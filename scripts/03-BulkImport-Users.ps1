@@ -1,19 +1,22 @@
-<#
+﻿<#
 .SYNOPSIS
     Bulk imports users, provisions departmental sub-OUs, and creates security groups.
 .DESCRIPTION
-    Reads user records from CSV, creates missing department sub-OUs, provisions department 
+    Reads user records from CSV, creates missing department sub-OUs, provisions department
     security groups, and populates user accounts with UPNs and group memberships.
-    NOTE: Replace domain placeholders ('rtworks.local' and 'yourdomain.onmicrosoft.com') with your environment values.
+    NOTE: Supply mandatory parameters -EntraDomain and -RootTargetOU when executing.
 #>
 
 [CmdletBinding()]
 param(
     [string] $CsvPath = "C:\poshlog\users.csv",
-    # TODO: Replace 'yourdomain.onmicrosoft.com' with your verified tenant domain
-    [string] $EntraDomain = "yourdomain.onmicrosoft.com",
-    # TODO: Replace 'rtworks.local' with your domain components
-    [string] $RootTargetOU = "OU=CorpUsers,DC=rtworks,DC=local",
+
+    [Parameter(Mandatory = $true)]
+    [string] $EntraDomain,
+
+    [Parameter(Mandatory = $true)]
+    [string] $RootTargetOU,
+
     [string[]] $Departments = @('IT', 'HR', 'Finance', 'Sales', 'Marketing', 'Engineering', 'Operations', 'Legal', 'Product', 'Customer Support')
 )
 
@@ -23,7 +26,6 @@ begin {
 }
 
 process {
-    # 1. Ensure all department OUs and corresponding Security Groups exist first
     foreach ($dept in $Departments) {
         $deptOU = "OU=$dept,$RootTargetOU"
         if (-not (Get-ADOrganizationalUnit -Filter "DistinguishedName -eq '$deptOU'" -ErrorAction SilentlyContinue)) {
@@ -31,7 +33,6 @@ process {
             New-ADOrganizationalUnit -Name $dept -Path $RootTargetOU -PassThru | Out-Null
         }
 
-        # Create department security group if it doesn't exist
         $groupName = "$dept-Security-Group"
         if (-not (Get-ADGroup -Filter "Name -eq '$groupName'" -ErrorAction SilentlyContinue)) {
             Write-Verbose "Creating department security group: $groupName under $deptOU"
@@ -47,7 +48,6 @@ process {
     $users = Import-Csv -Path $CsvPath
     Write-Output "Loaded $($users.Count) user records from CSV dataset."
 
-    # 2. Process and provision each user
     foreach ($user in $users) {
         $targetOU = "OU=$($user.Department),$RootTargetOU"
         $upn = "$($user.SamAccountName)@$EntraDomain"
@@ -55,17 +55,14 @@ process {
 
         try {
             Write-Verbose "Processing user: $($user.SamAccountName) -> Department: $($user.Department)"
-            
-            # Check if user exists, create if not (Sample mock/placeholder for AD creation)
+
             $adUser = Get-ADUser -Filter "SamAccountName -eq '$($user.SamAccountName)'" -ErrorAction SilentlyContinue
             if (-not $adUser) {
-                # Example: New-ADUser -SamAccountName $user.SamAccountName -UserPrincipalName $upn -Path $targetOU -Enabled $true ...
                 Write-Verbose "User account would be created at: $targetOU"
             }
 
-            # Add user to their respective department security group
             Add-ADGroupMember -Identity $groupName -Members $user.SamAccountName -ErrorAction SilentlyContinue
-            
+
             [PSCustomObject]@{
                 SamAccountName = $user.SamAccountName
                 UPN            = $upn
@@ -75,7 +72,6 @@ process {
             }
         }
         catch {
-            # Fixed typo: changed SamAccountName} to SamAccountName)
             Write-Error "Failed to process user '$($user.SamAccountName)': $_"
         }
     }

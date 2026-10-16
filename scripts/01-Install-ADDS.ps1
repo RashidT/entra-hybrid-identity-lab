@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installs AD DS and sets up the root container structure.
 .DESCRIPTION
@@ -8,7 +8,6 @@
 
 [CmdletBinding()]
 param(
-    # TODO: Replace 'rtworks' with your own Active Directory domain component
     [string] $BaseDN = "DC=rtworks,DC=local",
     [string] $RootContainer = "CorpUsers"
 )
@@ -16,7 +15,7 @@ param(
 begin {
     Write-Output "Starting Active Directory Domain Services environment setup..."
     Write-Verbose "Checking for Active Directory PowerShell module."
-    
+
     if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {
         throw "The Active Directory module is required but not installed."
     }

@@ -1,16 +1,17 @@
-<#
+﻿<#
 .SYNOPSIS
     Executes repeat-safe user attribute updates and handles department transfers.
 .DESCRIPTION
     Applies attribute updates, verifies container compliance, scans existing user records, detects department changes by cross-referencing with CSV data, automatically moves user objects to their new departmental sub-OU, and updates group memberships safely across multiple executions.
-    NOTE: Update the RootTargetOU parameter default if using a custom domain name instead of rtworks.local.
+    NOTE: Supply mandatory parameter -RootTargetOU when executing.
 #>
 
 [CmdletBinding()]
 param(
     [string] $CsvPath = "C:\poshlog\users.csv",
-    # TODO: Replace 'rtworks.local' with your Active Directory domain components if modified
-    [string] $RootTargetOU = "OU=CorpUsers,DC=rtworks,DC=local"
+
+    [Parameter(Mandatory = $true)]
+    [string] $RootTargetOU
 )
 
 begin {
@@ -38,22 +39,18 @@ process {
                 $currentDept = $adUser.Department
                 $currentDN = $adUser.DistinguishedName
 
-                # Check if the user has changed departments
                 if ($currentDept -ne $targetDept) {
                     Write-Output "Department change detected for user '$samName': '$currentDept' -> '$targetDept'. Relocating..."
 
-                    # 1. Move user object to the new departmental sub-OU
                     Move-ADObject -Identity $currentDN -TargetPath $correctOU
 
-                    # 2. Update the Department attribute in AD
                     Set-ADUser -Identity $samName -Department $targetDept
 
-                    # 3. Update Group Memberships (Remove from old group, add to new group)
                     if ($currentDept) {
                         $oldGroup = "$currentDept-Security-Group"
                         Remove-ADGroupMember -Identity $oldGroup -Members $samName -Confirm:$false -ErrorAction SilentlyContinue
                     }
-                    
+
                     $newGroup = "$targetDept-Security-Group"
                     Add-ADGroupMember -Identity $newGroup -Members $samName -ErrorAction SilentlyContinue
 
