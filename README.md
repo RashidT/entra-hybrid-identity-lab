@@ -1,3 +1,4 @@
+
 # Hybrid Identity & Entra ID UPN Synchronization Lab
 
 > **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and comprehensive Pester v6 infrastructure validation tests.**
@@ -10,7 +11,7 @@ The lab utilizes modular, repeatable PowerShell scripts to automate the entire d
 ## Key Features & Capabilities
 - **Automated Active Directory Deployment:** Streamlined installation of AD DS, domain configuration, and hierarchical OU management (`CorpUsers`, and all 10 departmental sub-containers like `IT`, `HR`, `Finance`, `Sales`, `Marketing`, `Engineering`, `Operations`, `Legal`, `Product`, and `Customer Support`).
 - **Entra-Ready UPN Suffix Management:** Configures and maps verified custom domain UPN suffixes (`@yourdomain.onmicrosoft.com`) via mandatory runtime parameters to eliminate default `.local` routing issues during hybrid synchronization.
-- **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses CSV datasets (`C:\poshlog\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
+- **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses repository datasets (`.\data\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
 - **Automated Department Transfers & Migrations:** Repeat-safe attribute updating scripts (`05-Update-ADUsers.ps1`) that detect department changes, dynamically move user objects across sub-OUs, and update security group memberships.
 - **Hybrid Identity Synchronization:** Configures local Microsoft Entra Connect Cloud Sync agents (`AADConnectProvisioningAgent`) to establish secure cloud-to-on-prem directory synchronization.
 - **Comprehensive Pester v6 Testing:** Includes automated test suites (`tests/IdentityLab.Tests.ps1`) to validate Active Directory health, all 10 department OUs, security group scopes, user attribute formatting, and CSV record parity.
@@ -57,7 +58,7 @@ entra-hybrid-identity-lab/
 ├── tests/
 │   └── IdentityLab.Tests.ps1   # Pester v6 validation suite for all 10 OUs & groups
 ├── data/
-│   └── users.csv               # Sample CSV dataset
+│   └── users.csv               # Portable sample CSV dataset (default path: .\data\users.csv)
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -72,7 +73,7 @@ entra-hybrid-identity-lab/
     
 -   **Modules Required:** `ActiveDirectory`, `Pester` (v6.2.0+).
     
--   **CSV Data Path:** `C:\poshlog\users.csv` formatted with headers: `Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password`
+-   **CSV Data Path:** Defaults to `.\data\users.csv` within the repository root, formatted with headers: `Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password`
     
 
 ## Quick Start Guide
@@ -99,7 +100,7 @@ Code snippet
 
 ### 2. Bulk Import Users and Provision Department Security Groups
 
-Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters:
+Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters (**defaults automatically to the repository's** `.\data\users.csv` **file**):
 
 PowerShell
 
