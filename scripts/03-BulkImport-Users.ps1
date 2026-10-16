@@ -9,7 +9,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $CsvPath = "C:\poshlog\users.csv",
+    [string] $CsvPath = ".\data\users.csv",
 
     [Parameter(Mandatory = $true)]
     [string] $EntraDomain,
