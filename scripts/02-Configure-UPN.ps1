@@ -3,14 +3,14 @@
     Configures UPN suffixes for hybrid identity routing.
 .DESCRIPTION
     Adds alternative UPN suffixes to the AD forest to support seamless Entra ID sign-in.
-    NOTE: Replace the default placeholder domain with your organization's verified cloud domain.
+    NOTE: Provide your organization's verified cloud domain when executing the script.
 #>
 
 [CmdletBinding()]
 param(
-    # TODO: Replace 'yourdomain.onmicrosoft.com' with your actual Microsoft Entra tenant verified domain
+    # TODO: Supply your actual Microsoft Entra tenant verified domain (e.g., yourdomain.onmicrosoft.com)
     [Parameter(Mandatory = $true)]
-    [string] $CustomUpnSuffix = "rtworks.onmicrosoft.com"
+    [string] $CustomUpnSuffix
 )
 
 begin {
