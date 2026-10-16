@@ -79,7 +79,7 @@ entra-hybrid-identity-lab/
 
 ### 1. Initialize Active Directory & Configure UPN Suffixes
 
-Execute the foundational deployment and configure your verified Entra domain UPN suffix:
+Execute the foundational deployment script, then run Script 02 passing your verified Microsoft Entra tenant domain via the mandatory -CustomUpnSuffix parameter:
 
 Code snippet
 
@@ -92,7 +92,9 @@ Code snippet
 Code snippet
 
 ```
+
 # 02 - Configure UPN Suffixes
+# Note: Pass your verified domain (e.g., yourdomain.onmicrosoft.com) to the mandatory -CustomUpnSuffix parameter
 .\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix "yourdomain.onmicrosoft.com"
 
 ```
