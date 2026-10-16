@@ -11,7 +11,7 @@
 param(
     [string] $CsvPath = "C:\poshlog\users.csv",
     # TODO: Replace 'yourdomain.onmicrosoft.com' with your verified tenant domain
-    [string] $EntraDomain = "<tenant>.onmicrosoft.com",
+    [string] $EntraDomain = "yourdomain.onmicrosoft.com",
     # TODO: Replace 'rtworks.local' with your domain components
     [string] $RootTargetOU = "OU=CorpUsers,DC=rtworks,DC=local",
     [string[]] $Departments = @('IT', 'HR', 'Finance', 'Sales', 'Marketing', 'Engineering', 'Operations', 'Legal', 'Product', 'Customer Support')
@@ -75,7 +75,8 @@ process {
             }
         }
         catch {
-            Write-Error "Failed to process user '$($user.SamAccountName}': $_"
+            # Fixed typo: changed SamAccountName} to SamAccountName)
+            Write-Error "Failed to process user '$($user.SamAccountName)': $_"
         }
     }
 }
