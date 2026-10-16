@@ -1,12 +1,12 @@
 
 # Hybrid Identity & Entra ID UPN Synchronization Lab
 
-> **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and comprehensive Pester v6 infrastructure validation tests.**
+> **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and mock-enabled Pester v6 infrastructure validation tests.**
 
 ## Overview
 This repository provides a production-grade, automated infrastructure framework for building, configuring, and validating a hybrid identity environment. Designed for identity and access management (IAM) engineers, administrators, and professionals preparing for certifications like the Microsoft SC-300, this lab bridges on-premises Active Directory Domain Services (AD DS) with Microsoft Entra ID.
 
-The lab utilizes modular, repeatable PowerShell scripts to automate the entire deployment lifecycle—from foundational forest and domain creation to User Principal Name (UPN) suffix routing, dynamic department sub-OU provisioning, bulk user and security group creation, and attribute synchronization updates. Infrastructure health, CSV parity, and configuration compliance are continuously verified using automated Pester v6 unit test suites.
+The lab utilizes modular, repeatable PowerShell scripts to automate the entire deployment lifecycle—from foundational forest and domain creation to User Principal Name (UPN) suffix routing, dynamic department sub-OU provisioning, bulk user and security group creation, and attribute synchronization updates. Infrastructure health, CSV parity, and configuration compliance are continuously verified using automated Pester v6 unit test suites equipped with mocking for seamless CI/CD execution.
 
 ## Key Features & Capabilities
 - **Automated Active Directory Deployment:** Streamlined installation of AD DS, domain configuration, and hierarchical OU management (`CorpUsers`, and all 10 departmental sub-containers like `IT`, `HR`, `Finance`, `Sales`, `Marketing`, `Engineering`, `Operations`, `Legal`, `Product`, and `Customer Support`).
@@ -14,7 +14,7 @@ The lab utilizes modular, repeatable PowerShell scripts to automate the entire d
 - **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses repository datasets (`.\data\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
 - **Automated Department Transfers & Migrations:** Repeat-safe attribute updating scripts (`05-Update-ADUsers.ps1`) that detect department changes, dynamically move user objects across sub-OUs, and update security group memberships.
 - **Hybrid Identity Synchronization:** Configures local Microsoft Entra Connect Cloud Sync agents (`AADConnectProvisioningAgent`) to establish secure cloud-to-on-prem directory synchronization.
-- **Comprehensive Pester v6 Testing:** Includes automated test suites (`tests/IdentityLab.Tests.ps1`) to validate Active Directory health, all 10 department OUs, security group scopes, user attribute formatting, and CSV record parity.
+- **CI/CD-Ready Pester v6 Testing:** Includes automated test suites (`tests/IdentityLab.Tests.ps1`) using advanced mocking to validate OU hierarchies, security group scopes, and CSV record parity across both local domain controllers and standard cloud CI runners (GitHub Actions).
 
 ---
 
@@ -45,7 +45,7 @@ Plaintext
 entra-hybrid-identity-lab/
 ├── .github/
 │   └── workflows/
-│       └── pester-tests.yml    # Automated GitHub Actions CI/CD test pipeline
+│       └── pester-tests.yml    # Automated GitHub Actions CI/CD test pipeline (Mock-enabled)
 ├── docs/
 │   ├── architecture.md
 │   └── images/                 # Screenshots and visual assets directory
@@ -56,7 +56,7 @@ entra-hybrid-identity-lab/
 │   ├── 04-Configure-CloudSync.ps1
 │   └── 05-Update-ADUsers.ps1
 ├── tests/
-│   └── IdentityLab.Tests.ps1   # Pester v6 validation suite for all 10 OUs & groups
+│   └── IdentityLab.Tests.ps1   # Pester v6 validation & mocking suite for all 10 OUs & groups
 ├── data/
 │   └── users.csv               # Portable sample CSV dataset (default path: .\data\users.csv)
 ├── .gitignore
@@ -100,7 +100,7 @@ Code snippet
 
 ### 2. Bulk Import Users and Provision Department Security Groups
 
-Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters (**defaults automatically to the repository's** `.\data\users.csv` **file**):
+Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters (defaults automatically to the repository's `.\data\users.csv` file):
 
 PowerShell
 
@@ -127,7 +127,7 @@ Code snippet
 
 ### 4. Run Infrastructure Validation Tests
 
-Verify Active Directory health, all 10 department OUs, security group scopes, OU hierarchy, and CSV user parity using Pester v6:
+Verify Active Directory health, all 10 department OUs, security group scopes, OU hierarchy, and CSV user parity using Pester v6 (fully compatible with local DCs and mock environments):
 
 Code snippet
 
