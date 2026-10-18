@@ -1,30 +1,50 @@
-name: Script Validation & Syntax Checks
+name: Lab checks
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
-  validate-scripts:
+  test:
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Run Script Analyzer
-        shell: powershell
+      - name: Install pinned modules
+        shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $results = Invoke-ScriptAnalyzer -Path ./scripts -Recurse
-          if ($results) {
-              $results | Format-Table
-              exit 1
-          }
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -RequiredVersion 6.2.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
 
-      - name: Run Pester Syntax Check
-        shell: powershell
+      - name: PSScriptAnalyzer
+        shell: pwsh
         run: |
-          Install-Module Pester -Force -Scope CurrentUser
-          Invoke-Pester -Path ./tests -Passthru
+          $findings = @(Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Settings ./PSScriptAnalyzerSettings.psd1)
+          $findings | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap
+          if ($findings.Count -gt 0) { throw "$($findings.Count) PSScriptAnalyzer finding(s)." }
+
+      - name: Pester
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Filter.ExcludeTag = 'Integration'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'TestResults.xml'
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults.xml
