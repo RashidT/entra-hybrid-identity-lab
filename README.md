@@ -1,160 +1,178 @@
+# Hybrid Identity Lab: Active Directory to Microsoft Entra ID
 
-# Hybrid Identity & Entra ID UPN Synchronization Lab
+A hands-on lab that connects an on-premises Active Directory forest (`rtworks.local`) to a Microsoft Entra tenant with Entra Cloud Sync, and shows what happens to user principal names (UPNs) along the way. The PowerShell scripts provision users from a CSV, keep them in line with that CSV, and move them to a new UPN suffix. Pester tests check the scripts.
 
-> **Automated on-premises Active Directory and Microsoft Entra ID hybrid identity lab environment featuring modular PowerShell scripts, UPN synchronization, automated user/group provisioning, dynamic department sub-OUs, and mock-enabled Pester v6 infrastructure validation tests.**
+I built this while preparing for SC-300 (passed October 2026).
 
-## Overview
-This repository provides a production-grade, automated infrastructure framework for building, configuring, and validating a hybrid identity environment. Designed for identity and access management (IAM) engineers, administrators, and professionals preparing for certifications like the Microsoft SC-300, this lab bridges on-premises Active Directory Domain Services (AD DS) with Microsoft Entra ID.
+## What the lab shows
 
-The lab utilizes modular, repeatable PowerShell scripts to automate the entire deployment lifecycle—from foundational forest and domain creation to User Principal Name (UPN) suffix routing, dynamic department sub-OU provisioning, bulk user and security group creation, and attribute synchronization updates. Infrastructure health, CSV parity, and configuration compliance are continuously verified using automated Pester v6 unit test suites equipped with mocking for seamless CI/CD execution.
+The scripts cover the whole joiner / mover / leaver (JML) lifecycle: 03 creates joiners, 05 handles movers and leavers.
 
-## Key Features & Capabilities
-- **Automated Active Directory Deployment:** Streamlined installation of AD DS, domain configuration, and hierarchical OU management (`CorpUsers`, and all 10 departmental sub-containers like `IT`, `HR`, `Finance`, `Sales`, `Marketing`, `Engineering`, `Operations`, `Legal`, `Product`, and `Customer Support`).
-- **Entra-Ready UPN Suffix Management:** Configures and maps verified custom domain UPN suffixes (`@yourdomain.onmicrosoft.com`) via mandatory runtime parameters to eliminate default `.local` routing issues during hybrid synchronization.
-- **Repeatable & Safe-to-Rerun Bulk User & Group Provisioning:** Parses repository datasets (`.\data\users.csv`) to automatically create user objects inside dynamic department sub-OUs, construct proper full-name display attributes, and provision department-aligned security groups (`$Dept-Security-Group`) without creating duplicates if run multiple times.
-- **Automated Department Transfers & Migrations:** Repeat-safe attribute updating scripts (`05-Update-ADUsers.ps1`) that detect department changes, dynamically move user objects across sub-OUs, and update security group memberships.
-- **Hybrid Identity Synchronization:** Configures local Microsoft Entra Connect Cloud Sync agents (`AADConnectProvisioningAgent`) to establish secure cloud-to-on-prem directory synchronization.
-- **CI/CD-Ready Pester v6 Testing:** Includes automated test suites (`tests/IdentityLab.Tests.ps1`) using advanced mocking to validate OU hierarchies, security group scopes, and CSV record parity across both local domain controllers and standard cloud CI runners (GitHub Actions).
+1. Users are created on the forest's own suffix, `@rtworks.local`, and synced to Entra.
+2. In the cloud, a non-routable `.local` UPN is replaced with the tenant's `.onmicrosoft.com` suffix. The on-premises and cloud UPNs do not match. (Cloud Sync matches objects on a source anchor, not the UPN, so the sync works.)
+3. The tenant suffix is registered in the forest, and every user is moved to it.
+4. After the next sync, the on-premises and cloud UPNs match.
 
----
+Evidence for each stage (screenshots and exported results) goes in `docs/`.
 
-## Architecture Overview
+## What is scripted and what is not
 
-```mermaid
-graph TD
-    subgraph Host ["Local Hyper-V Host"]
-        AD["Active Directory DC<br/>Domain: rtworks.local<br/>UPN Suffixes Configured"]
-        Sync["Entra Connect Sync Agent<br/>Provisioning Agent"]
-        AD -->|Syncs Users & Groups| Sync
-    end
+| Part | How it was done |
+|------|-----------------|
+| Forest, domain controller and Hyper-V VM | Built by hand, following Microsoft's *Building a basic Active Directory environment* tutorial (see Credits). Not scripted. |
+| Cloud Sync agent install and configuration | Done by hand in the Entra admin center. Script 04 only *checks* the agent's health. |
+| OU, UPN suffix, users, groups, updates, UPN change | Scripts 01, 02, 03, 05 and 06. |
 
-    Sync -->|"TLS / HTTPS (Cloud Sync)"| Entra["Microsoft Entra Tenant<br/>yourdomain.onmicrosoft.com"]
-
-    style Host fill:#f9f9f9,stroke:#333,stroke-width:2px
-    style AD fill:#e1f5fe,stroke:#01579b,stroke-width:1px
-    style Sync fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
-    style Entra fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
-
-```
-
-## Repository Structure
-
-Plaintext
+## Repository structure
 
 ```
 entra-hybrid-identity-lab/
-├── .github/
-│   └── workflows/
-│       └── pester-tests.yml    # Automated GitHub Actions CI/CD test pipeline (Mock-enabled)
+├── .github/workflows/pester-tests.yml   # CI: script analysis + unit tests
+├── data/users.csv                       # 100 sample users (no passwords)
 ├── docs/
+│   ├── REQUIREMENTS.md                  # Testable requirements for this repo
 │   ├── architecture.md
-│   └── images/                 # Screenshots and visual assets directory
+│   └── images/                          # Screenshots and evidence
 ├── scripts/
-│   ├── 01-Install-ADDS.ps1
-│   ├── 02-Configure-UPNSuffixes.ps1
-│   ├── 03-BulkImport-Users.ps1
-│   ├── 04-Configure-CloudSync.ps1
-│   └── 05-Update-ADUsers.ps1
+│   ├── LabCommon.ps1                    # Shared helpers (CSV validation, DN helpers)
+│   ├── 01-Initialize-OUStructure.ps1    # Creates OU=CorpUsers
+│   ├── 02-Configure-UPNSuffixes.ps1     # Registers a UPN suffix in the forest
+│   ├── 03-BulkImport-Users.ps1          # Department OUs, groups and users from the CSV
+│   ├── 04-Test-CloudSyncAgent.ps1       # Read-only health check of the sync agent
+│   ├── 05-Update-ADUsers.ps1            # Movers and leavers: brings AD back in line with the CSV
+│   └── 06-Set-UserUPN.ps1               # Moves users to a new UPN suffix
 ├── tests/
-│   └── IdentityLab.Tests.ps1   # Pester v6 validation & mocking suite for all 10 OUs & groups
-├── data/
-│   └── users.csv               # Portable sample CSV dataset (default path: .\data\users.csv)
-├── .gitignore
+│   ├── TestSetup.ps1                    # Stand-in AD cmdlets for machines without RSAT
+│   ├── Data.Tests.ps1                   # Helpers and users.csv
+│   ├── Scripts.Tests.ps1                # Mocked tests for scripts 01-06
+│   └── IdentityLab.Integration.Tests.ps1  # Needs a real domain controller
+├── PSScriptAnalyzerSettings.psd1
 ├── LICENSE
 └── README.md
-
 ```
 
-## Prerequisites & Requirements
+## Architecture
 
--   **Operating System:** Windows Server 2022 or Windows 11 Enterprise (Hyper-V enabled).
-    
--   **Permissions:** Local Administrator rights on the target domain controller/management workstation.
-    
--   **Modules Required:** `ActiveDirectory`, `Pester` (v6.2.0+).
-    
--   **CSV Data Path:** Defaults to `.\data\users.csv` within the repository root, formatted with headers: `Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office,Password`
-    
-
-## Quick Start Guide
-
-### 1. Initialize Active Directory & Configure UPN Suffixes
-
-Execute the foundational deployment script, then run Script 02 supplying your verified Microsoft Entra tenant domain to the mandatory `-CustomUpnSuffix` parameter:
-
-Code snippet
-
-```
-# 01 - Install AD DS Forest and Domain
-.\scripts\01-Install-ADDS.ps1
-
+```mermaid
+graph TD
+    subgraph Host ["Hyper-V host"]
+        AD["Domain controller<br/>rtworks.local"]
+        Agent["Entra Cloud Sync<br/>provisioning agent"]
+        AD --> Agent
+    end
+    Agent -->|"HTTPS (443)"| Entra["Microsoft Entra tenant<br/>yourtenant.onmicrosoft.com"]
 ```
 
-Code snippet
+## Prerequisites
+
+- A working forest and domain controller (see the first Microsoft tutorial under Credits).
+- The `ActiveDirectory` PowerShell module (installed on a domain controller, or through RSAT).
+- Rights to create OUs, users and groups. Script 02 changes the forest, so it needs Enterprise Admins.
+- Pester 6.2.0 and PSScriptAnalyzer 1.24.0 to run the checks locally. CI uses the same versions.
+- An Entra tenant with Cloud Sync set up, with the sync scope covering `OU=CorpUsers` and its sub-OUs.
+
+## The CSV
+
+`data/users.csv` has these columns. `GivenName`/`Surname` are accepted in place of `Name`/`LastName`.
 
 ```
-# 02 - Configure UPN Suffixes
-.\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix "yourdomain.onmicrosoft.com"
-
+Name,LastName,DisplayName,UserPrincipalName,SamAccountName,Department,Title,Office
 ```
 
-### 2. Bulk Import Users and Provision Department Security Groups
+There is no password column. Every script validates the whole file first and reports all problems at once, before it changes anything.
 
-Run the bulk import script by supplying your tenant domain and target root container to the mandatory parameters (defaults automatically to the repository's `.\data\users.csv` file):
+## Running the lab
 
-PowerShell
+All scripts support `-WhatIf`. Run with `-WhatIf` first to see what would change. The scripts end with an error if any user failed, so the exit code can be trusted.
 
-```
-# 03 - Bulk Import Users, Department Sub-OUs, and Security Groups
-.\scripts\03-BulkImport-Users.ps1 -EntraDomain "yourdomain.onmicrosoft.com" -RootTargetOU "OU=CorpUsers,DC=rtworks,DC=local"
+### 1. Create the root OU
 
-```
-
--   **Verification:** Run `Get-ADGroup -Filter "Name -like '*-Security-Group'"` in PowerShell to confirm all department-aligned security groups were successfully provisioned.
-    
-
-### 3. Update Existing User Attributes and Sub-OU Placement
-
-To apply repeat-safe updates, propagate naming standard changes, or automatically relocate existing accounts into their proper department sub-containers uniformly, supply your target root OU:
-
-Code snippet
-
-```
-# 05 - Update Existing User Attributes and Sub-OU Placement
-.\scripts\05-Update-ADUsers.ps1 -RootTargetOU "OU=CorpUsers,DC=rtworks,DC=local"
-
+```powershell
+.\scripts\01-Initialize-OUStructure.ps1
 ```
 
-### 4. Run Infrastructure Validation Tests
+### 2. Create department OUs, groups and users (on `.local`)
 
-Verify Active Directory health, all 10 department OUs, security group scopes, OU hierarchy, and CSV user parity using Pester v6 (fully compatible with local DCs and mock environments):
+The initial password is requested as a secure string, is never stored, and each user must change it at first sign-in.
 
-Code snippet
-
-```
-# IdentityLab - Pester Infrastructure Validation Suite
-Invoke-Pester -Path .\tests\IdentityLab.Tests.ps1 -Output Detailed
-
+```powershell
+$pw = Read-Host -AsSecureString -Prompt 'Initial password'
+.\scripts\03-BulkImport-Users.ps1 -InitialPassword $pw
 ```
 
-### Verification Commands
+Optional: `-CsvPath` for another file, `-RootTargetOU` for a different root OU (default `OU=CorpUsers,<your domain>`).
 
-To verify that user display names and attributes are correctly populated across Active Directory:
+### 3. Check the sync agent, then sync and record the baseline
 
-Code snippet
-
-```
-Get-ADUser -Filter * -SearchBase "OU=CorpUsers,DC=rtworks,DC=local" -Properties DisplayName, Department | Format-Table SamAccountName, Name, DisplayName, Department -AutoSize
-
+```powershell
+.\scripts\04-Test-CloudSyncAgent.ps1
 ```
 
-## Reference & Learning Resources
+Run this on the server where the agent is installed. In Entra, record the cloud UPN of a few users. Expect the tenant's `.onmicrosoft.com` suffix, not `.local`. Confirm this in your own tenant.
 
-This lab builds upon core Microsoft hybrid identity deployment patterns. For official documentation on setting up foundational Active Directory and cloud sync architectures, refer to:
+### 4. Movers and leavers: update AD after a CSV change
 
--   [Microsoft Tutorial: Basic Active Directory and Entra Connect Cloud Sync](https://learn.microsoft.com/)
-    
+```powershell
+.\scripts\05-Update-ADUsers.ps1 -WhatIf
+.\scripts\05-Update-ADUsers.ps1
+```
+
+**Movers:** moves users to the right department OU, updates attributes, and fixes department group membership.
+
+**Leavers:** an account under the root OU that is not in the CSV is a leaver. By default it is only reported (`NotInCsv`). To deprovision leavers, add `-ProcessLeavers`:
+
+```powershell
+.\scripts\05-Update-ADUsers.ps1 -ProcessLeavers -WhatIf
+.\scripts\05-Update-ADUsers.ps1 -ProcessLeavers
+```
+
+For each leaver the script, in this order:
+
+1. disables the account, so access stops first
+2. removes it from the department security groups (other groups are left alone)
+3. stamps the account Description with the leaver date
+4. moves it to `OU=Disabled` under the root OU, last, so an interrupted run is picked up again
+
+Nothing is deleted. `OU=Disabled` stays inside the root OU, so the disabled account stays in the Cloud Sync scope and the disable reaches Entra. Accounts already processed show as `AlreadyLeaver`.
+
+Safeguards:
+- `-MaxLeavers` (default 10): if more accounts than this would be processed, the script stops before any change. This protects against a wrong or truncated CSV disabling everyone.
+- A CSV user found in the Disabled OU (a rehire) is reported as `Failed` and left alone. Re-enable and move the account by hand first.
+- `-DisabledOUName` changes the OU name (default `Disabled`). The OU is created if it does not exist.
+
+### 5. Migrate to the tenant suffix
+
+```powershell
+.\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix 'yourtenant.onmicrosoft.com'
+.\scripts\06-Set-UserUPN.ps1 -NewSuffix 'yourtenant.onmicrosoft.com' -LogPath .\upn-migration.csv
+```
+
+Script 06 refuses a suffix that is not registered, and the log shows each user's UPN before and after. Sync again and record the after state.
+
+## Tests
+
+```powershell
+# Static analysis
+Invoke-ScriptAnalyzer -Path .\scripts -Settings .\PSScriptAnalyzerSettings.psd1
+
+# Unit tests (no domain controller needed)
+Invoke-Pester -Path .\tests -ExcludeTag Integration
+
+# Integration tests (on a domain controller or RSAT workstation)
+Invoke-Pester -Path .\tests\IdentityLab.Integration.Tests.ps1 -Tag Integration
+```
+
+The unit tests mock Active Directory, so they check what each script *does* (which commands it calls, with what), not the result in a real directory. The integration tests check the real lab domain. GitHub Actions runs the analyzer and the unit tests on every push and pull request.
+
+## Roadmap
+
+Planned next phase: GitHub Actions signs in to Entra with an OIDC federated credential (no stored secret), deploys Conditional Access policies in report-only mode, and Pester tests read the policy state back through Microsoft Graph. See `docs/REQUIREMENTS.md`.
+
+## Credits
+
+- Microsoft Learn: [Building a basic Active Directory environment](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/tutorial-basic-ad-azure)
+- Microsoft Learn: [Microsoft Entra Cloud Sync tutorial for a single AD forest](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/tutorial-single-forest)
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT. See `LICENSE`.

@@ -1,11 +1,20 @@
-﻿# PowerShell and Local Log Files
+# PowerShell and Local Log Files
 *.log
 transcript/
 poshlog/
 
 # Pester Test Results & XML Reports
 testResults.xml
+TestResults.xml
 TestResults/
+
+# Unsanitized screenshots and evidence (never commit originals)
+docs/images/raw/
+# exiftool keeps a backup of the original, with its metadata, next to each cleaned file
+*_original
+
+# Local output of 06-Set-UserUPN.ps1 -LogPath (review it, then move it into docs/ on purpose)
+upn-migration*.csv
 
 # Editor and IDE Settings (VS Code / Visual Studio)
 .vscode/
