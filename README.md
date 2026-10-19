@@ -9,7 +9,7 @@ I built this while preparing for SC-300 (passed October 2026).
 The scripts cover the whole joiner / mover / leaver (JML) lifecycle: 03 creates joiners, 05 handles movers and leavers.
 
 1. Users are created on the forest's own suffix, `@rtworks.local`, and synced to Entra.
-2. In the cloud, a non-routable `.local` UPN is replaced with the tenant's `.onmicrosoft.com` suffix. The on-premises and cloud UPNs do not match. (Cloud Sync matches objects on a source anchor, not the UPN, so the sync works.)
+2. In the cloud, a non-routable `.local` UPN is replaced with the tenant's `.onmicrosoft.com` suffix. The on-premises and cloud UPNs do not match. (Cloud Sync matches objects on a source anchor, `ms-DS-ConsistencyGuid` with a fallback to `objectGUID`, not the UPN, so the sync works. See the Cloud Sync FAQ under Credits.)
 3. The tenant suffix is registered in the forest, and every user is moved to it.
 4. After the next sync, the on-premises and cloud UPNs match.
 
@@ -60,7 +60,7 @@ graph TD
         Agent["Entra Cloud Sync<br/>provisioning agent"]
         AD --> Agent
     end
-    Agent -->|"HTTPS (443)"| Entra["Microsoft Entra tenant<br/>yourtenant.onmicrosoft.com"]
+    Agent -->|"HTTPS (443)"| Entra["Microsoft Entra tenant<br/><tenant>.onmicrosoft.com"]
 ```
 
 ## Prerequisites
@@ -69,6 +69,7 @@ graph TD
 - The `ActiveDirectory` PowerShell module (installed on a domain controller, or through RSAT).
 - Rights to create OUs, users and groups. Script 02 changes the forest, so it needs Enterprise Admins.
 - Pester 6.2.0 and PSScriptAnalyzer 1.24.0 to run the checks locally. CI uses the same versions.
+- CI runs on PowerShell 7 (`windows-latest`, `pwsh`). Windows PowerShell 5.1 is not yet tested (R-15).
 - An Entra tenant with Cloud Sync set up, with the sync scope covering `OU=CorpUsers` and its sub-OUs.
 
 ## The CSV
@@ -108,7 +109,7 @@ Optional: `-CsvPath` for another file, `-RootTargetOU` for a different root OU (
 .\scripts\04-Test-CloudSyncAgent.ps1
 ```
 
-Run this on the server where the agent is installed. In Entra, record the cloud UPN of a few users. Expect the tenant's `.onmicrosoft.com` suffix, not `.local`. Confirm this in your own tenant.
+Run this on the server where the agent is installed. Scope the sync to a pilot OU first (this lab used `OU=IT`, 12 users), then widen it to `OU=CorpUsers`. In Entra, record the cloud UPN of a few users. Expect the tenant's `.onmicrosoft.com` suffix, not `.local`. Confirm this in your own tenant.
 
 ### 4. Movers and leavers: update AD after a CSV change
 
@@ -143,11 +144,12 @@ Safeguards:
 ### 5. Migrate to the tenant suffix
 
 ```powershell
-.\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix 'yourtenant.onmicrosoft.com'
-.\scripts\06-Set-UserUPN.ps1 -NewSuffix 'yourtenant.onmicrosoft.com' -LogPath .\upn-migration.csv
+.\scripts\02-Configure-UPNSuffixes.ps1 -CustomUpnSuffix '<tenant>.onmicrosoft.com'
+.\scripts\06-Set-UserUPN.ps1 -NewSuffix '<tenant>.onmicrosoft.com' -WhatIf
+.\scripts\06-Set-UserUPN.ps1 -NewSuffix '<tenant>.onmicrosoft.com' -LogPath .\upn-migration.csv
 ```
 
-Script 06 refuses a suffix that is not registered, and the log shows each user's UPN before and after. Sync again and record the after state.
+Script 06 refuses a suffix that is not registered. Under `-WhatIf` it writes no log, so use `-LogPath` on the real run. The log shows each user's UPN before and after; it is ignored by Git, so review it and move it into `docs/` on purpose. Sync again and record the after state.
 
 ## Tests
 
@@ -171,7 +173,8 @@ Planned next phase: GitHub Actions signs in to Entra with an OIDC federated cred
 ## Credits
 
 - Microsoft Learn: [Building a basic Active Directory environment](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/tutorial-basic-ad-azure)
-- Microsoft Learn: [Microsoft Entra Cloud Sync tutorial for a single AD forest](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/tutorial-single-forest)
+- Microsoft Learn: [Integrate a single forest with a single Microsoft Entra tenant](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/tutorial-single-forest)
+- Microsoft Learn: [Microsoft Entra Cloud Sync FAQ](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/reference-cloud-sync-faq) (source anchor)
 
 ## License
 
