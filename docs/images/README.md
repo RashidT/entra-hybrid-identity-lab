@@ -36,9 +36,11 @@ Finish
 | File | What it shows | Requirement |
 |------|---------------|-------------|
 | `01-baseline-onprem-upn.png` | A few users with `@rtworks.local` UPNs in AD | R-31 |
+| `scoping-filter-pilot.png` | The Cloud Sync scoping filter during the pilot (`OU=IT` only) | R-31 (supporting) |
+| `pilot-synced-users.png` | The pilot's IT users in Entra, marked as synced from on-premises | R-31 (supporting) |
 | `02-baseline-cloud-upn.png` | The same users in Entra, with the cloud UPN suffix | R-31 |
 | `scoping-filter.png` | The Cloud Sync scoping filter (selected OUs) | R-31 |
-| `attribute-mappings.png` | The Cloud Sync attribute mappings | `docs/architecture.md` section 4 |
+| `attribute-mappings-1.png`, `attribute-mappings-2.png` | The Cloud Sync attribute mappings (two parts) | `docs/architecture.md` section 4 |
 | `agent-health.png` | Output of `04-Test-CloudSyncAgent.ps1` | R-13 |
 | `03-after-onprem-upn.png` | The same users after script 06 | R-32 |
 | `04-after-cloud-upn.png` | The cloud UPN now matching | R-32 |
