@@ -16,9 +16,10 @@
     The script ends with a terminating error if any check failed. A passing result only proves the
     local side. Whether users actually arrive in Entra must be confirmed separately in the tenant.
 .PARAMETER ServiceName
-    Name of the provisioning agent service. Verify it with Get-Service on your agent server.
+    Name of the provisioning agent service. Confirmed with Get-Service on the lab's agent server.
 .PARAMETER UpdaterServiceName
-    Name of the agent updater service. Verify it with Get-Service on your agent server.
+    Name of the agent updater service (display name: Microsoft Azure AD Connect Agent Updater).
+    Confirmed with Get-Service on the lab's agent server.
 .PARAMETER Endpoint
     Host names to test for outbound connectivity. The defaults are a minimum; extend the list from
     the endpoint list in Microsoft's Cloud Sync prerequisites documentation, which changes over time.
@@ -32,7 +33,7 @@
 param(
     [string] $ServiceName = 'AADConnectProvisioningAgent',
 
-    [string] $UpdaterServiceName = 'AADConnectProvisioningAgentUpdater',
+    [string] $UpdaterServiceName = 'AzureADConnectAgentUpdater',
 
     [string[]] $Endpoint = @('login.microsoftonline.com', 'login.windows.net'),
 

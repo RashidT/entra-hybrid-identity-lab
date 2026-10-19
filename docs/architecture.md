@@ -49,12 +49,32 @@ The lab runs in two stages so the before and after can be compared.
 
 | Stage | On-premises UPN | UPN seen in Entra | Notes |
 |-------|-----------------|-------------------|-------|
-| 1. Baseline | `user@rtworks.local` | `user@<tenant>.onmicrosoft.com` | `.local` is not routable and cannot be verified in Entra, so the cloud substitutes the tenant suffix. Confirm this in your own tenant. |
+| 1. Baseline | `user@rtworks.local` | `user@<initial-domain>` | `.local` is not routable and cannot be verified in Entra, so Entra builds the cloud UPN from the user's mail nickname and the tenant's **initial** domain (the `.onmicrosoft.com` name the tenant was created with). Confirmed in the lab tenant. |
 | 2. Migrated | `user@<tenant>.onmicrosoft.com` | `user@<tenant>.onmicrosoft.com` | After 02 registers the suffix and 06 changes each UPN, the two match. |
 
 Cloud Sync matches on a source anchor, not on the UPN, so the baseline syncs without problems. Only the sign-in name differs.
 
-**Cloud Sync scope.** The agent syncs objects from `OU=CorpUsers` and its sub-OUs, including `OU=Disabled`. Whether department groups sync, and which attributes (`DisplayName`, `Department`, `Title`, `Office`) are mapped, depends on the Cloud Sync configuration in the Entra admin center. Check the attribute mappings in your tenant and record them in `docs/images/`.
+**Initial domain vs. migration target.** In the lab tenant these are two different domains. The initial domain cannot be renamed or removed, and setting another domain as the tenant's default does not change the fallback: synced users only take a new suffix once their on-premises UPN uses a verified domain. The migration target, `<tenant>.onmicrosoft.com`, must show as **Verified** under Entra > Domain names before 02 runs. The initial domain is not named anywhere in this repository and is redacted in the screenshots.
+
+**Cloud Sync scope.** The agent syncs objects from `OU=CorpUsers` and its sub-OUs, including `OU=Disabled`. The rollout was piloted on `OU=IT` (12 users) before the scope was widened to `OU=CorpUsers` (100 users).
+
+**Attribute mappings (confirmed in the lab tenant).** The Cloud Sync mapping page uses AD-style names, so `Title` and `PhysicalDeliveryOfficeName` appear there instead of Graph's `jobTitle` and `officeLocation`. All five attributes the scripts depend on are mapped with expressions, not direct copies:
+
+| Target (Entra) | Expression | Used by |
+|---|---|---|
+| `UserPrincipalName` | `IIF(IsPresent([userPrincipalName]), [userPrincipalName], IIF(IsPresent([sAMAccountName]), Join("@", [sAMAccountName], %DomainFQDN%), Error("AccountName is not present")))` | 06 (UPN migration) |
+| `DisplayName` | `IIF(IsPresent([displayName]), [displayName], [cn])` | 03, 05 |
+| `Department` | `Trim([department])` | 03, 05 (movers) |
+| `Title` | `Trim([title])` | 03, 05 |
+| `PhysicalDeliveryOfficeName` | `Trim([physicalDeliveryOfficeName])` | 03, 05 |
+
+What the expressions mean for the lab:
+
+- **UPN:** the on-premises `userPrincipalName` is used whenever it is set; `sAMAccountName@<domain FQDN>` is only a fallback. Every lab user has a UPN, so the new suffix set by 06 is what reaches Entra (Entra then substitutes the initial domain if that suffix is not verified, as above).
+- **Display name:** falls back to the object's `cn` if `displayName` is empty. 03 always sets `displayName`, so the fallback is not used.
+- **Department, title, office:** leading and trailing spaces are trimmed on the way to Entra. `Import-LabUserCsv` already trims every CSV value before 03 or 05 writes it, so for script-managed accounts the AD and Entra values are identical. Only a value padded by hand in AD would differ between the two.
+
+Values were also checked on a synced user in Entra (job title and office location populated). Evidence: `docs/images/attribute-mappings-1.png` and `attribute-mappings-2.png`.
 
 ## 5. Identity lifecycle (joiner, mover, leaver)
 

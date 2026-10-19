@@ -318,7 +318,7 @@ Describe '04-Test-CloudSyncAgent.ps1' {
         Mock Get-Service -ParameterFilter { $Name -eq 'AADConnectProvisioningAgent' } {
             [pscustomobject]@{ Status = 'Running'; StartType = 'Automatic' }
         }
-        Mock Get-Service -ParameterFilter { $Name -eq 'AADConnectProvisioningAgentUpdater' } {
+        Mock Get-Service -ParameterFilter { $Name -eq 'AzureADConnectAgentUpdater' } {
             [pscustomobject]@{ Status = 'Running'; StartType = 'Automatic' }
         }
         Mock Get-CimInstance { [pscustomobject]@{ StartName = 'RTWORKS\provAgent$' } }
