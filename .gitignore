@@ -14,7 +14,7 @@ docs/images/raw/
 *_original
 
 # Local output of 06-Set-UserUPN.ps1 -LogPath (review it, then move it into docs/ on purpose)
-upn-migration*.csv
+/upn-migration*.csv
 
 # Editor and IDE Settings (VS Code / Visual Studio)
 .vscode/
