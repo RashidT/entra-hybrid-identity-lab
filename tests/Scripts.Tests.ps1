@@ -12,17 +12,32 @@ BeforeAll {
 
     function Invoke-LabScript {
         param([string] $Name, [hashtable] $Parameters = @{})
-        $result = [pscustomobject]@{ Output = @(); Threw = $false; Error = '' }
+        $result = [pscustomobject]@{ Output = @(); Information = @(); Threw = $false; Error = '' }
         $collected = New-Object -TypeName System.Collections.Generic.List[object]
+        $information = New-Object -TypeName System.Collections.Generic.List[string]
         try {
-            & (Join-Path -Path $script:ScriptsDir -ChildPath $Name) @Parameters | ForEach-Object { $collected.Add($_) }
+            # 6>&1 brings the information stream (the summary line) into the pipeline so it can be
+            # asserted on. It is split off here, so Output holds only the per-account result objects.
+            & (Join-Path -Path $script:ScriptsDir -ChildPath $Name) @Parameters 6>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.InformationRecord]) { $information.Add("$($_.MessageData)") }
+                else { $collected.Add($_) }
+            }
         }
         catch {
             $result.Threw = $true
             $result.Error = $_.Exception.Message
         }
         $result.Output = $collected.ToArray()
+        $result.Information = $information.ToArray()
         return $result
+    }
+
+    # The one summary line a script writes at the end of a run.
+    function Get-SummaryLine {
+        param([object] $Result)
+        $lines = @($Result.Information | Where-Object { $_ -like 'Users:*' })
+        $lines.Count | Should -Be 1 -Because "the script writes one summary line. $($Result.Error)"
+        return $lines[0]
     }
 
     function New-TestCsv {
@@ -504,6 +519,22 @@ Describe '05-Update-ADUsers.ps1' {
         Should -Invoke Add-ADGroupMember -Exactly -Times 0 -Scope It
     }
 
+    It 'summary line reports what changed on a real run, with no "would" wording (R-19)' {
+        $state.Fixture = New-FixtureUser -Office 'Wrong Building'
+        $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv }
+        $result.Threw | Should -BeFalse -Because $result.Error
+        Get-SummaryLine -Result $result |
+            Should -Be 'Users: 1 in CSV, 1 updated, 0 unchanged. Leavers: 0 processed, 0 reported only. 0 failed or not found.'
+    }
+
+    It 'summary line reports "would update" counts under -WhatIf (R-19)' {
+        $state.Fixture = New-FixtureUser -Office 'Wrong Building'
+        $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv; WhatIf = $true }
+        $result.Threw | Should -BeFalse -Because $result.Error
+        Get-SummaryLine -Result $result |
+            Should -Be 'Users: 1 in CSV, 1 would update (WhatIf), 0 unchanged. Leavers: 0 would process (WhatIf), 0 reported only. 0 failed or not found.'
+    }
+
     It 'stops before any change when a department group is missing' {
         Mock Get-ADGroup { }
         $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv }
@@ -574,6 +605,20 @@ Describe '05-Update-ADUsers.ps1' {
             Should -Invoke Move-ADObject -Exactly -Times 0 -Scope It
         }
 
+        It 'summary line reports a processed leaver on a real run (R-19)' {
+            $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv; ProcessLeavers = $true }
+            $result.Threw | Should -BeFalse -Because $result.Error
+            Get-SummaryLine -Result $result |
+                Should -Be 'Users: 1 in CSV, 0 updated, 1 unchanged. Leavers: 1 processed, 0 reported only. 0 failed or not found.'
+        }
+
+        It 'summary line reports "would process" for a leaver under -WhatIf (R-19)' {
+            $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv; ProcessLeavers = $true; WhatIf = $true }
+            $result.Threw | Should -BeFalse -Because $result.Error
+            Get-SummaryLine -Result $result |
+                Should -Be 'Users: 1 in CSV, 0 would update (WhatIf), 1 unchanged. Leavers: 1 would process (WhatIf), 0 reported only. 0 failed or not found.'
+        }
+
         It 'stops before any change when more leavers would be processed than -MaxLeavers allows' {
             $result = Invoke-LabScript -Name '05-Update-ADUsers.ps1' -Parameters @{ CsvPath = $script:Csv; ProcessLeavers = $true; MaxLeavers = 1 }
             $result.Threw | Should -BeFalse -Because $result.Error
@@ -636,6 +681,20 @@ Describe '06-Set-UserUPN.ps1' {
         $result = Invoke-LabScript -Name '06-Set-UserUPN.ps1' -Parameters @{ NewSuffix = 'contoso.onmicrosoft.com'; CsvPath = $script:Csv; WhatIf = $true }
         $result.Output[0].Action | Should -Be 'WouldUpdate' -Because $result.Error
         Should -Invoke Set-ADUser -Exactly -Times 0 -Scope It
+    }
+
+    It 'summary line reports what changed on a real run, with no "would" wording (R-19)' {
+        $result = Invoke-LabScript -Name '06-Set-UserUPN.ps1' -Parameters @{ NewSuffix = 'contoso.onmicrosoft.com'; CsvPath = $script:Csv }
+        $result.Threw | Should -BeFalse -Because $result.Error
+        Get-SummaryLine -Result $result |
+            Should -Be 'Users: 1 in CSV, 1 updated, 0 unchanged, 0 failed or not found.'
+    }
+
+    It 'summary line reports "would update" counts under -WhatIf (R-19)' {
+        $result = Invoke-LabScript -Name '06-Set-UserUPN.ps1' -Parameters @{ NewSuffix = 'contoso.onmicrosoft.com'; CsvPath = $script:Csv; WhatIf = $true }
+        $result.Threw | Should -BeFalse -Because $result.Error
+        Get-SummaryLine -Result $result |
+            Should -Be 'Users: 1 in CSV, 1 would update (WhatIf), 0 unchanged, 0 failed or not found.'
     }
 
     It 'reports a user that cannot be found and fails overall' {
