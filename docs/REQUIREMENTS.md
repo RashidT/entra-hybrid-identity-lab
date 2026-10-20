@@ -56,12 +56,57 @@ Every review finding is written as a requirement you can test. Priority: **P1** 
 | R-42 | P3 | README credits both Microsoft tutorials (basic AD environment; Cloud Sync) with corrected links. Links opened and checked 2026-10-19. |
 | R-43 | P3 | README states what is simulated versus real, and which tests need a domain controller. |
 
-## Phase 3 (not built yet)
+## Phase 3: OIDC, Graph and Conditional Access (not built yet)
 
-| ID | Pri | Requirement |
-|----|-----|-------------|
-| R-50 | P1 | GitHub Actions authenticates to Entra with an OIDC federated credential scoped to this repo and branch. No client secret is stored. |
-| R-51 | P1 | The app registration has least-privilege Graph permissions (read policy state for tests; write only for the deploy job). |
-| R-52 | P1 | Conditional Access policies are deployed in report-only mode, with break-glass accounts excluded. |
-| R-53 | P2 | Pester tests read policy state back from Graph and assert it matches the intended definition. |
-| R-54 | P2 | The OIDC job is separate (`id-token: write` only there) and runs only on `main`. |
+Goal: GitHub Actions signs in to Entra with no stored secret, deploys Conditional Access policies in report-only mode, and Pester reads them back through Microsoft Graph. Sources are listed at the end of this section; anything not backed by an opened page is marked *(unverified)*.
+
+### Prerequisites (confirm in the tenant before building)
+
+| ID | Check | Why | Confirmed |
+|----|-------|-----|-----------|
+| P-01 | The tenant has at least Microsoft Entra ID P1 (a trial counts). | Conditional Access needs at least P1. | Not yet |
+| P-02 | The security defaults state is recorded. Security defaults are not turned off unless replacement policies are enforced the same day. | Microsoft: organizations that replace security defaults with Conditional Access must turn them off, then enable policies immediately. Report-only policies are not a replacement. | Not yet |
+| P-03 | Two emergency access accounts exist: cloud-only on `<tenant>.onmicrosoft.com`, never synced (not under `OU=CorpUsers`), in a dedicated group `EmergencyAccess`. Strong auth that is different from normal admin accounts (Microsoft recommends a passkey/FIDO2). | Microsoft's emergency access guidance. | Not yet |
+| P-04 | The repo's OIDC `sub` format is known: repos created after July 15, 2026 use the immutable form `repo:OWNER@OWNER-ID/REPO@REPO-ID:...`; older repos use `repo:OWNER/REPO:...`. | The federated credential subject must match the token's `sub` exactly. A wrong subject is accepted when saved and only fails at sign-in. | Not yet |
+
+### Requirements
+
+| ID | Pri | Requirement | Verified by (planned) |
+|----|-----|-------------|-----------------------|
+| R-50 | P1 | GitHub Actions authenticates with an OIDC federated credential. Issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, and a subject that matches the real token `sub` exactly (no wildcards: Entra doesn't support them). Neither app has a client secret or certificate. | Graph check that `passwordCredentials` and `keyCredentials` are empty on both apps; federated credentials screenshot |
+| R-51 | P1 | Least privilege needs **two** app registrations, because Graph permissions belong to the app, not to a federated credential. `lab-ca-reader`: application permission `Policy.Read.All` only. `lab-ca-deployer`: `Policy.Read.All` + `Policy.ReadWrite.ConditionalAccess` only. Admin consent granted; no delegated permissions; no Entra directory roles assigned to either service principal. | Pester: decode each job's access token and assert the `roles` claim is exactly the expected set (needs no extra Graph permission) *(unverified)* |
+| R-52 | P1 | Every lab policy is created with `state` = `enabledForReportingButNotEnforced` and excludes the `EmergencyAccess` group. The deploy script refuses any definition whose state is anything else. Exclusion is kept even though Microsoft says report-only policies don't need it, so switching a policy to On later is safe. | Pester (R-53); deploy script unit test for the refusal; policy list screenshot |
+| R-53 | P2 | Pester tests (tag `Graph`) read each `LAB-` policy back through Graph v1.0 and assert state, included and excluded users/groups/roles, conditions and grant controls match the JSON definition in the repo. They fail on drift, on a missing policy, on an unexpected `LAB-` policy, and on any `LAB-` policy that is enabled. | `graph-tests` job in CI |
+| R-54 | P2 | The existing `test` job is unchanged and has no `id-token` permission. `id-token: write` exists only on the two Graph jobs, which run only on `main` and never on pull requests. Pull requests keep running the AD unit tests only. | Workflow review; a PR run shows no Graph job |
+| R-55 | P1 | Subjects: `graph-tests` (reader app) trusts `ref:refs/heads/main`. `ca-deploy` (deployer app) runs in a GitHub environment `ca-deploy` (deployment branches limited to `main`, required reviewer = you) and trusts `environment:ca-deploy`. A job's token only matches its own app's credential. | Federated credentials screenshot; R-56 |
+| R-56 | P2 | Negative check: a run from another branch cannot get a token (the exchange fails with "no matching federated identity record" *(unverified wording)*). The error is captured as evidence. | One manual run from a test branch; screenshot of the failed step |
+| R-57 | P1 | Deploy is idempotent and non-destructive: it matches policies by `displayName`, creates missing ones, updates only properties that differ, never deletes, and supports `-WhatIf`. A re-run reports every policy unchanged. | Unit tests with mocked Graph cmdlets; two real runs |
+| R-58 | P1 | No tenant-specific values are committed. Policy JSON uses placeholders (for example `{{EmergencyAccessGroupId}}`, `{{PilotGroupId}}`), filled at run time from GitHub secrets or variables. Client ID and tenant ID are stored as secrets so they're masked in logs. Tokens are never written to output. | `Data.Tests.ps1`-style test: no GUIDs and no `onmicrosoft.com` in `policies/*.json`; log review |
+| R-59 | P2 | Policy set (prefix `LAB-`): `LAB-001` require MFA for admin roles; `LAB-002` block legacy authentication; `LAB-003` require MFA for the synced `IT-Security-Group` (ties Phase 3 to the hybrid sync). No device compliance policies: in report-only mode they can still prompt for a certificate on macOS, iOS and Android. | R-53 |
+| R-60 | P3 | Evidence (redact the tenant name, initial domain and tenant ID; app client IDs optional): federated credentials for both apps; API permissions for both apps (admin consent shown); CA policy list showing Report-only; one policy's Exclude tab showing `EmergencyAccess`; green `graph-tests` and `ca-deploy` runs; one sign-in log entry with the Report-only tab result. Unredacted originals go to `C:\LabEvidence\raw`. | Files in `docs/images/` |
+| R-61 | P3 | Actions are pinned to a commit SHA, not a tag. | Workflow review |
+
+### Setup accounts and roles (least privilege for people, not just the apps)
+
+| Setup task | Least privileged Entra role | Notes |
+|------------|-----------------------------|-------|
+| Create the two app registrations | Application Developer | Creates apps and updates apps it owns. Confirm the creating account appears under **Owners** *(unverified that this is automatic)*. |
+| Add the federated credentials | Owner of the app (no extra role) | Microsoft: the app owner, or Application Administrator, Cloud Application Administrator or Hybrid Identity Administrator. |
+| Grant admin consent to the Graph application permissions | Privileged Role Administrator | Application Administrator and Cloud Application Administrator can't consent to Microsoft Graph application permissions. Microsoft notes Global Administrator may still be needed in practice; record which one worked. |
+| Create, edit and check CA policies in the portal | Conditional Access Administrator | Narrower than Security Administrator. For read-only review: Security Reader. |
+| Turn security defaults on or off (P-02) | Conditional Access Administrator | |
+| Create the emergency access accounts (P-03) | User Administrator | |
+| Create the `EmergencyAccess` group | Groups Administrator | |
+| Assign roles, including Global Administrator on the emergency accounts | Privileged Role Administrator | |
+| Enable the passkey (FIDO2) method | Authentication Policy Administrator | |
+| Read sign-in logs for the report-only evidence (R-60) | Reports Reader | |
+
+| ID | Pri | Requirement | Verified by (planned) |
+|----|-----|-------------|-----------------------|
+| R-62 | P1 | Each setup task uses the role in the table above, not Global Administrator. Roles go to dedicated cloud-only admin accounts on `<tenant>.onmicrosoft.com`, never to users synced from `rtworks.local`, so an on-prem compromise can't reach a cloud admin role. | Screenshot of each admin account's **Assigned roles** |
+| R-63 | P2 | Roles are held only as long as needed: PIM-eligible with activation if the tenant has PIM (needs Entra ID P2 or ID Governance *(unverified)*), otherwise the active assignments are removed when Phase 3 setup is done. The emergency access accounts are the only standing Global Administrators. | Role assignments screenshot before and after setup |
+| R-64 | P1 | Workload identities get no Entra roles: least privilege for the apps is the Graph permissions in R-51 only. | Pester (R-51); service principal **Roles and administrators** shows none |
+
+Out of scope for Phase 3: enforcing any policy, sign-in risk policies (need P2), leaver session revocation, and alerting on emergency account sign-ins (Microsoft recommends this; noted as a gap).
+
+Sources (opened 2026-10-20): Microsoft Learn: *Configure an app to trust an external identity provider*; Graph *List policies* and *Create conditionalAccessPolicy* (permissions); Graph *conditionalAccessPolicy resource* (`state` values); *Manage emergency access accounts*; *Least privileged roles by task*; *Grant tenant-wide admin consent*; *Report-only mode*; *Security defaults*. GitHub Docs: *Configuring OpenID Connect in Azure*; *OpenID Connect reference* (immutable `sub`).
