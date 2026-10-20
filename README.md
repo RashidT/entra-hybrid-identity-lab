@@ -162,7 +162,7 @@ Script 06 refuses a suffix that is not registered. Under `-WhatIf` it writes no 
 | --- | --- | --- |
 | Baseline, on-premises | [`01-baseline-onprem-upn.png`](docs/images/01-baseline-onprem-upn.png) | Users on `@rtworks.local` |
 | Baseline, cloud | [`02-baseline-cloud-upn.png`](docs/images/02-baseline-cloud-upn.png) | The same users in Entra on a different suffix: the UPNs don't match |
-| Agent health | [`agent-health.png`](docs/images/agent-health.png) | Script 04: 7 of 7 checks pass |
+| Agent health | [`agent-health.png`](docs/images/agent-health.png) | Script 04: 9 of 9 checks pass |
 | UPN migration | [`upn-migration.csv`](docs/upn-migration.csv) | 100 users, before and after UPN, all `Updated` |
 | After, on-premises | [`03-after-onprem-upn.png`](docs/images/03-after-onprem-upn.png) | The same users on `@<tenant>.onmicrosoft.com` |
 | After, cloud | [`04-after-cloud-upn.png`](docs/images/04-after-cloud-upn.png) | Cloud UPNs now match on-premises |
