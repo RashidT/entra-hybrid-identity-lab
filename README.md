@@ -69,7 +69,7 @@ graph TD
 - The `ActiveDirectory` PowerShell module (installed on a domain controller, or through RSAT).
 - Rights to create OUs, users and groups. Script 02 changes the forest, so it needs Enterprise Admins.
 - Pester 6.2.0 and PSScriptAnalyzer 1.24.0 to run the checks locally. CI uses the same versions.
-- CI runs on PowerShell 7 (`windows-latest`, `pwsh`). Windows PowerShell 5.1 is not yet tested (R-15).
+- Works on Windows PowerShell 5.1 (the lab DC ran every script on 5.1.20348) and PowerShell 7 (CI runs on `pwsh`, `windows-latest`).
 - An Entra tenant with Cloud Sync set up, with the sync scope covering `OU=CorpUsers` and its sub-OUs.
 
 ## The CSV
