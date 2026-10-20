@@ -25,7 +25,7 @@ Every review finding is written as a requirement you can test. Priority: **P1** 
 | R-16 | P1 | Leavers (JML): with `-ProcessLeavers`, accounts under the root OU that are not in the CSV are disabled first, removed from department groups only, stamped with a leaver description, and moved last to the Disabled OU under the root OU. Nothing is deleted. | `Scripts.Tests.ps1` (05 leavers); fake-AD harness; DC + tenant: one test leaver processed, disabled in Entra by the next sync (`docs/images/leaver-*.png`) |
 | R-17 | P1 | Leaver processing is opt-in, repeatable (`AlreadyLeaver`), completes an interrupted run, supports `-WhatIf`, and stops before any change if more than `-MaxLeavers` (default 10) would be processed, to guard against a wrong or truncated CSV. | `Scripts.Tests.ps1`; DC: `-WhatIf` reported `1 would process` and changed nothing |
 | R-18 | P2 | A CSV user found in the Disabled OU (rehire) is reported as Failed and not moved or re-enabled. | `Scripts.Tests.ps1` |
-| R-19 | P3 | Summary lines tell a preview from a real run: under `-WhatIf`, 05 and 06 report "would update" / "would process" counts; a real run reports what changed. | DC (05 and 06, both modes). **No unit test yet** |
+| R-19 | P3 | Summary lines tell a preview from a real run: under `-WhatIf`, 05 and 06 report "would update" / "would process" counts; a real run reports what changed. | DC (05 and 06, both modes); unit tests in `tests/Scripts.Tests.ps1` (names end in "(R-19)") |
 
 ## Tests and CI
 
