@@ -308,7 +308,17 @@ $updatedCount = @($results | Where-Object { $_.Action -eq 'Updated' }).Count
 $unchangedCount = @($results | Where-Object { $_.Action -eq 'NoChange' }).Count
 $notInCsvCount = @($results | Where-Object { $_.Action -eq 'NotInCsv' }).Count
 $leaverCount = @($results | Where-Object { $_.Action -eq 'LeaverProcessed' }).Count
-Write-Information -MessageData "Users: $($users.Count) in CSV, $updatedCount updated, $unchangedCount unchanged. Leavers: $leaverCount processed, $notInCsvCount reported only. $failed failed or not found." -InformationAction Continue
+if ($WhatIfPreference) {
+    $wouldUpdateCount = @($results | Where-Object { $_.Action -eq 'WouldUpdate' }).Count
+    $wouldLeaverCount = @($results | Where-Object { $_.Action -eq 'WouldProcessLeaver' }).Count
+    $userText = "$wouldUpdateCount would update (WhatIf)"
+    $leaverText = "$wouldLeaverCount would process (WhatIf)"
+}
+else {
+    $userText = "$updatedCount updated"
+    $leaverText = "$leaverCount processed"
+}
+Write-Information -MessageData "Users: $($users.Count) in CSV, $userText, $unchangedCount unchanged. Leavers: $leaverText, $notInCsvCount reported only. $failed failed or not found." -InformationAction Continue
 
 if ($failed -gt 0) {
     throw "$failed account(s) failed or were not found. See the Action and Detail columns."
