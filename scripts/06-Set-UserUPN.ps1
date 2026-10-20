@@ -119,7 +119,14 @@ if ($LogPath) {
 
 $updatedCount = @($results | Where-Object { $_.Action -eq 'Updated' }).Count
 $unchangedCount = @($results | Where-Object { $_.Action -eq 'NoChange' }).Count
-Write-Information -MessageData "Users: $($users.Count) in CSV, $updatedCount updated, $unchangedCount unchanged, $failed failed or not found." -InformationAction Continue
+$wouldUpdateCount = @($results | Where-Object { $_.Action -eq 'WouldUpdate' }).Count
+if ($WhatIfPreference) {
+    $changeText = "$wouldUpdateCount would update (WhatIf)"
+}
+else {
+    $changeText = "$updatedCount updated"
+}
+Write-Information -MessageData "Users: $($users.Count) in CSV, $changeText, $unchangedCount unchanged, $failed failed or not found." -InformationAction Continue
 
 if ($failed -gt 0) {
     throw "$failed of $($users.Count) user(s) failed or were not found. See the Action and Detail columns."
