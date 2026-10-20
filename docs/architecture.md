@@ -15,7 +15,7 @@ graph TD
         Agent["Entra Cloud Sync<br/>provisioning agent"]
         AD -->|"reads in-scope objects"| Agent
     end
-    Agent -->|"outbound HTTPS (443)"| Entra["Microsoft Entra tenant<br/>yourtenant.onmicrosoft.com"]
+    Agent -->|"outbound HTTPS (443)"| Entra["Microsoft Entra tenant<br/><tenant>.onmicrosoft.com"]
 ```
 
 The agent only makes outbound connections, so the domain controller needs no inbound port open to the internet. Script `04-Test-CloudSyncAgent.ps1` checks the agent service, its service account, TLS settings, and reachability of the Microsoft endpoints.
@@ -50,9 +50,9 @@ The lab runs in two stages so the before and after can be compared.
 | Stage | On-premises UPN | UPN seen in Entra | Notes |
 |-------|-----------------|-------------------|-------|
 | 1. Baseline | `user@rtworks.local` | `user@<initial-domain>` | `.local` is not routable and cannot be verified in Entra, so Entra builds the cloud UPN from the user's mail nickname and the tenant's **initial** domain (the `.onmicrosoft.com` name the tenant was created with). Confirmed in the lab tenant. |
-| 2. Migrated | `user@<tenant>.onmicrosoft.com` | `user@<tenant>.onmicrosoft.com` | After 02 registers the suffix and 06 changes each UPN, the two match. |
+| 2. Migrated | `user@<tenant>.onmicrosoft.com` | `user@<tenant>.onmicrosoft.com` | After 02 registers the suffix and 06 changes each UPN, the two match. Confirmed in the lab tenant: 100 users updated, and the cloud UPNs match after the next sync. |
 
-Cloud Sync matches on a source anchor, not on the UPN, so the baseline syncs without problems. Only the sign-in name differs.
+Cloud Sync matches on a source anchor, not on the UPN, so the baseline syncs without problems. Only the sign-in name differs. Microsoft's Cloud Sync FAQ states that the source anchor is `ms-DS-ConsistencyGuid`, with a fallback to `objectGUID`, and that it can't be changed. Because the anchor never changes, 06's UPN change updates the existing cloud users instead of creating new ones.
 
 **Initial domain vs. migration target.** In the lab tenant these are two different domains. The initial domain cannot be renamed or removed, and setting another domain as the tenant's default does not change the fallback: synced users only take a new suffix once their on-premises UPN uses a verified domain. The migration target, `<tenant>.onmicrosoft.com`, must show as **Verified** under Entra > Domain names before 02 runs. The initial domain is not named anywhere in this repository and is redacted in the screenshots.
 
@@ -100,6 +100,10 @@ flowchart LR
 | Leaver | Row removed from the CSV | With `-ProcessLeavers`, 05 disables the account, removes department groups, stamps the description, and moves it to `OU=Disabled`. Nothing is deleted. |
 | Rehire | Leaver row returns to the CSV | 05 reports it as `Failed` and changes nothing. Re-enable and move the account by hand, then run 05. |
 
+**Groups.** The department security groups sync to Entra (source: Windows Server AD, type: Security, membership: Assigned). Their source of authority is AD, so Entra shows them as read-only: membership is changed in AD, by 03 and 05, and the change arrives with the next sync.
+
+**Leaver, confirmed in the lab.** A test leaver was removed from a copy of the CSV and processed with `05 -ProcessLeavers`. In AD, the account was disabled, removed from its department group, stamped, and moved to `OU=Disabled`. In Entra, the same sync cycle (same minute as the run) set `accountEnabled` to false, the account still shows as synced from on-premises, and the group audit log records the member removal. Evidence: `docs/images/leaver-before-after.png`, `leaver-group-audit.png` and `leaver-provisioning-log.png`.
+
 Safeguards: every script supports `-WhatIf`, validates all input before changing anything, and is safe to rerun. Leaver processing is opt-in and stops before any change if more than `-MaxLeavers` accounts would be processed.
 
 ## 6. Script map
@@ -119,6 +123,8 @@ Safeguards: every script supports `-WhatIf`, validates all input before changing
 - **PSScriptAnalyzer** runs on `scripts/` in CI and fails on any finding.
 - **Unit tests** (`tests/Data.Tests.ps1`, `tests/Scripts.Tests.ps1`) run in GitHub Actions without a domain controller. Active Directory is mocked, so they check which commands each script calls and with what, not the state of a real directory.
 - **Integration tests** (`tests/IdentityLab.Integration.Tests.ps1`, tagged `Integration`) run on a domain controller and check the real OUs, groups and users. They also confirm that `05 -WhatIf` finds nothing to change.
+
+- **Reruns on the real domain:** a second run of 06 changed nothing (`0 updated, 100 unchanged`).
 
 Requirements and how each is verified are listed in `docs/REQUIREMENTS.md`.
 

@@ -4,7 +4,7 @@ This folder holds the sanitized screenshots and exported results that back up th
 
 ## Rules
 
-1. **Originals never enter the repo.** Keep unredacted captures in `docs/images/raw/`, which is listed in `.gitignore`, or better, in a folder outside the repo.
+1. **Originals never enter the repo.** Keep unredacted captures in a folder outside the repo (this lab uses `C:\LabEvidence\raw`). `docs/images/raw/` is listed in `.gitignore` only as a backstop.
 2. **Git history is permanent.** If an unredacted image is ever committed, deleting it later does not remove it. Rewrite the history and treat the exposed IDs as burned (for a lab tenant, creating a fresh one is the clean fix).
 3. Name files so the stage is obvious: `01-baseline-onprem-upn.png`, `02-baseline-cloud-upn.png`, `03-after-onprem-upn.png`, `04-after-cloud-upn.png`.
 
@@ -45,5 +45,7 @@ Finish
 | `03-after-onprem-upn.png` | The same users after script 06 | R-32 |
 | `04-after-cloud-upn.png` | The cloud UPN now matching | R-32 |
 | `leaver-before-after.png` | A leaver account before and after `05 -ProcessLeavers`, plus its blocked state in Entra | R-16 |
+| `leaver-group-audit.png` | Entra audit log: the leaver removed from its department group | R-16 (supporting) |
+| `leaver-provisioning-log.png` | Cloud Sync provisioning log: the update from AD, with `accountEnabled` set to false | R-16 (supporting) |
 
 The `06-Set-UserUPN.ps1 -LogPath` CSV and the output of `05-Update-ADUsers.ps1` are text, so they can be committed as files. Check them for real names or addresses first.

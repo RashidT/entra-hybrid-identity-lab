@@ -13,7 +13,7 @@ The scripts cover the whole joiner / mover / leaver (JML) lifecycle: 03 creates 
 3. The tenant suffix is registered in the forest, and every user is moved to it.
 4. After the next sync, the on-premises and cloud UPNs match.
 
-Evidence for each stage (screenshots and exported results) goes in `docs/`.
+Evidence for each stage (screenshots and exported results) is in `docs/`. See [Results](#results).
 
 ## What is scripted and what is not
 
@@ -136,6 +136,8 @@ For each leaver the script, in this order:
 
 Nothing is deleted. `OU=Disabled` stays inside the root OU, so the disabled account stays in the Cloud Sync scope and the disable reaches Entra. Accounts already processed show as `AlreadyLeaver`.
 
+The department groups sync to Entra too. A synced group's source of authority is AD, so Entra shows it as read-only: membership changes are made in AD (by 05) and arrive with the next sync.
+
 Safeguards:
 - `-MaxLeavers` (default 10): if more accounts than this would be processed, the script stops before any change. This protects against a wrong or truncated CSV disabling everyone.
 - A CSV user found in the Disabled OU (a rehire) is reported as `Failed` and left alone. Re-enable and move the account by hand first.
@@ -150,6 +152,26 @@ Safeguards:
 ```
 
 Script 06 refuses a suffix that is not registered. Under `-WhatIf` it writes no log, so use `-LogPath` on the real run. The log shows each user's UPN before and after; it is ignored by Git, so review it and move it into `docs/` on purpose. Sync again and record the after state.
+
+## Results
+
+| Stage | Evidence | Shows |
+|---|---|---|
+| Baseline, on-premises | [`01-baseline-onprem-upn.png`](docs/images/01-baseline-onprem-upn.png) | Users on `@rtworks.local` |
+| Baseline, cloud | [`02-baseline-cloud-upn.png`](docs/images/02-baseline-cloud-upn.png) | The same users in Entra on a different suffix: the UPNs don't match |
+| Agent health | [`agent-health.png`](docs/images/agent-health.png) | Script 04: 7 of 7 checks pass |
+| UPN migration | [`upn-migration.csv`](docs/upn-migration.csv) | 100 users, before and after UPN, all `Updated` |
+| After, on-premises | [`03-after-onprem-upn.png`](docs/images/03-after-onprem-upn.png) | The same users on `@<tenant>.onmicrosoft.com` |
+| After, cloud | [`04-after-cloud-upn.png`](docs/images/04-after-cloud-upn.png) | Cloud UPNs now match on-premises |
+| Leaver, AD and Entra | [`leaver-before-after.png`](docs/images/leaver-before-after.png) | Account disabled, department group removed, moved to `OU=Disabled`; disabled in Entra, still synced |
+| Leaver, group removal | [`leaver-group-audit.png`](docs/images/leaver-group-audit.png) | Entra audit log: member removed from the group |
+| Leaver, sync | [`leaver-provisioning-log.png`](docs/images/leaver-provisioning-log.png) | Cloud Sync provisioning log: update from AD, `accountEnabled` set to false |
+
+Notes:
+- Script 06 was run without `-LogPath`, so `upn-migration.csv` was rebuilt from `data/users.csv` (before) and AD (after, with the replication timestamp of each change). Every row is marked `Source = Rebuilt`.
+- The group audit entry was opened from the group's own audit log. Its group target shows no display name; the group's member list confirms the removal.
+- Running 06 a second time changed nothing (`0 updated, 100 unchanged`).
+- Tenant names and IDs are redacted in every image.
 
 ## Tests
 
