@@ -323,6 +323,9 @@ Describe '04-Test-CloudSyncAgent.ps1' {
         }
         Mock Get-CimInstance { [pscustomobject]@{ StartName = 'RTWORKS\provAgent$' } }
         Mock Get-ItemProperty { [pscustomobject]@{ SchUseStrongCrypto = 1 } }
+        Mock Get-ItemProperty -ParameterFilter { "$Path" -like '*SCHANNEL*' } {
+            [pscustomobject]@{ Enabled = 1; DisabledByDefault = 0 }
+        }
         Mock Test-NetConnection { [pscustomobject]@{ TcpTestSucceeded = $true } }
     }
 
@@ -363,6 +366,29 @@ Describe '04-Test-CloudSyncAgent.ps1' {
         $result = Invoke-LabScript -Name '04-Test-CloudSyncAgent.ps1'
         $result.Threw | Should -BeFalse -Because $result.Error
         @($result.Output | Where-Object { $_.Status -eq 'Warn' }).Count | Should -Be 2 -Because $result.Error
+    }
+
+    It 'only warns when the SCHANNEL TLS 1.2 keys are not set' {
+        Mock Get-ItemProperty -ParameterFilter { "$Path" -like '*SCHANNEL*' } { throw 'Cannot find path' }
+        $result = Invoke-LabScript -Name '04-Test-CloudSyncAgent.ps1'
+        $result.Threw | Should -BeFalse -Because $result.Error
+        @($result.Output | Where-Object { $_.Check -eq 'TLS 1.2 (SCHANNEL)' -and $_.Status -eq 'Warn' }).Count | Should -Be 1 -Because $result.Error
+    }
+
+    It 'fails when TLS 1.2 is explicitly disabled for SCHANNEL' {
+        Mock Get-ItemProperty -ParameterFilter { "$Path" -like '*SCHANNEL*' } {
+            [pscustomobject]@{ Enabled = 0; DisabledByDefault = 1 }
+        }
+        $result = Invoke-LabScript -Name '04-Test-CloudSyncAgent.ps1'
+        $result.Threw | Should -BeTrue
+        @($result.Output | Where-Object { $_.Check -eq 'TLS 1.2 (SCHANNEL)' -and $_.Status -eq 'Fail' }).Count | Should -Be 1 -Because $result.Error
+    }
+
+    It 'only warns when a CRL endpoint cannot be reached on port 80' {
+        Mock Test-NetConnection -ParameterFilter { $Port -eq 80 } { [pscustomobject]@{ TcpTestSucceeded = $false } }
+        $result = Invoke-LabScript -Name '04-Test-CloudSyncAgent.ps1'
+        $result.Threw | Should -BeFalse -Because $result.Error
+        @($result.Output | Where-Object { $_.Check -eq 'CRL crl.microsoft.com:80' -and $_.Status -eq 'Warn' }).Count | Should -Be 1 -Because $result.Error
     }
 }
 

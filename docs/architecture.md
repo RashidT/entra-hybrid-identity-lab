@@ -18,7 +18,7 @@ graph TD
     Agent -->|"outbound HTTPS (443)"| Entra["Microsoft Entra tenant<br/><tenant>.onmicrosoft.com"]
 ```
 
-The agent only makes outbound connections, so the domain controller needs no inbound port open to the internet. Script `04-Test-CloudSyncAgent.ps1` checks the agent service, its service account, TLS settings, and reachability of the Microsoft endpoints.
+The agent only makes outbound connections, so the domain controller needs no inbound port open to the internet. Script `04-Test-CloudSyncAgent.ps1` checks the agent service, its service account, TLS 1.2 (.NET and SCHANNEL registry settings), outbound 443 to the Microsoft sign-in endpoints, and port 80 for certificate revocation, following Microsoft's Cloud Sync prerequisites. It proves the local side only: the wildcard service endpoints (`*.msappproxy.net`, `*.servicebus.windows.net`) can't be tested by host name, and Entra can still report the agent as unhealthy.
 
 ## 3. Directory structure
 

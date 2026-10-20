@@ -1,3 +1,5 @@
+Markdown · README.md
+
 # Hybrid Identity Lab: Active Directory to Microsoft Entra ID
 
 A hands-on lab that connects an on-premises Active Directory forest (`rtworks.local`) to a Microsoft Entra tenant with Entra Cloud Sync, and shows what happens to user principal names (UPNs) along the way. The PowerShell scripts provision users from a CSV, keep them in line with that CSV, and move them to a new UPN suffix. Pester tests check the scripts.
@@ -18,7 +20,7 @@ Evidence for each stage (screenshots and exported results) is in `docs/`. See [R
 ## What is scripted and what is not
 
 | Part | How it was done |
-|------|-----------------|
+| --- | --- |
 | Forest, domain controller and Hyper-V VM | Built by hand, following Microsoft's *Building a basic Active Directory environment* tutorial (see Credits). Not scripted. |
 | Cloud Sync agent install and configuration | Done by hand in the Entra admin center. Script 04 only *checks* the agent's health. |
 | OU, UPN suffix, users, groups, updates, UPN change | Scripts 01, 02, 03, 05 and 06. |
@@ -139,6 +141,7 @@ Nothing is deleted. `OU=Disabled` stays inside the root OU, so the disabled acco
 The department groups sync to Entra too. A synced group's source of authority is AD, so Entra shows it as read-only: membership changes are made in AD (by 05) and arrive with the next sync.
 
 Safeguards:
+
 - `-MaxLeavers` (default 10): if more accounts than this would be processed, the script stops before any change. This protects against a wrong or truncated CSV disabling everyone.
 - A CSV user found in the Disabled OU (a rehire) is reported as `Failed` and left alone. Re-enable and move the account by hand first.
 - `-DisabledOUName` changes the OU name (default `Disabled`). The OU is created if it does not exist.
@@ -156,7 +159,7 @@ Script 06 refuses a suffix that is not registered. Under `-WhatIf` it writes no 
 ## Results
 
 | Stage | Evidence | Shows |
-|---|---|---|
+| --- | --- | --- |
 | Baseline, on-premises | [`01-baseline-onprem-upn.png`](docs/images/01-baseline-onprem-upn.png) | Users on `@rtworks.local` |
 | Baseline, cloud | [`02-baseline-cloud-upn.png`](docs/images/02-baseline-cloud-upn.png) | The same users in Entra on a different suffix: the UPNs don't match |
 | Agent health | [`agent-health.png`](docs/images/agent-health.png) | Script 04: 7 of 7 checks pass |
@@ -168,6 +171,7 @@ Script 06 refuses a suffix that is not registered. Under `-WhatIf` it writes no 
 | Leaver, sync | [`leaver-provisioning-log.png`](docs/images/leaver-provisioning-log.png) | Cloud Sync provisioning log: update from AD, `accountEnabled` set to false |
 
 Notes:
+
 - Script 06 was run without `-LogPath`, so `upn-migration.csv` was rebuilt from `data/users.csv` (before) and AD (after, with the replication timestamp of each change). Every row is marked `Source = Rebuilt`.
 - The group audit entry was opened from the group's own audit log. Its group target shows no display name; the group's member list confirms the removal.
 - Running 06 a second time changed nothing (`0 updated, 100 unchanged`).
