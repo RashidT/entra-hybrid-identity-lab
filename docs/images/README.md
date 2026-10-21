@@ -47,5 +47,6 @@ Finish
 | `leaver-before-after.png` | A leaver account before and after `05 -ProcessLeavers`, plus its blocked state in Entra | R-16 |
 | `leaver-group-audit.png` | Entra audit log: the leaver removed from its department group | R-16 (supporting) |
 | `leaver-provisioning-log.png` | Cloud Sync provisioning log: the update from AD, with `accountEnabled` set to false | R-16 (supporting) |
+| `breakglass-role-audit.png` | Entra audit log (Core Directory, RoleManagement): both `Add member to role` entries with initiator and targets, plus each entry's Modified Properties showing Global Administrator (`TenantAdmins`). Evidence for the bootstrap exception | R-62, P-03 |
 
 The `06-Set-UserUPN.ps1 -LogPath` CSV and the output of `05-Update-ADUsers.ps1` are text, so they can be committed as files. Check them for real names or addresses first.
