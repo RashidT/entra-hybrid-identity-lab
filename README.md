@@ -1,10 +1,17 @@
-Markdown · README.md
-
 # Hybrid Identity Lab: Active Directory to Microsoft Entra ID
 
 A hands-on lab that connects an on-premises Active Directory forest (`rtworks.local`) to a Microsoft Entra tenant with Entra Cloud Sync, and shows what happens to user principal names (UPNs) along the way. The PowerShell scripts provision users from a CSV, keep them in line with that CSV, and move them to a new UPN suffix. Pester tests check the scripts.
 
 I built this while preparing for SC-300 (passed October 2026).
+
+## Project status
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 1. Hybrid identity | AD forest synced to Entra with Cloud Sync; UPN migration to the tenant suffix | Done, evidenced |
+| 2. Joiner / mover / leaver | PowerShell JML scripts, Pester unit tests, CI on every push | Done, evidenced |
+| Tenant security baseline | Least-privilege admin roles, two emergency access accounts, MFA on every account | Done; screenshots being added |
+| 3. Automation with Microsoft Graph | GitHub Actions signs in with OIDC (no stored secret), deploys Conditional Access policies in report-only mode, Pester reads them back through Graph | In progress |
 
 ## What the lab shows
 
@@ -16,6 +23,16 @@ The scripts cover the whole joiner / mover / leaver (JML) lifecycle: 03 creates 
 4. After the next sync, the on-premises and cloud UPNs match.
 
 Evidence for each stage (screenshots and exported results) is in `docs/`. See [Results](#results).
+
+## Tenant security baseline
+
+Set up before Phase 3, so the automation runs in a tenant that is already locked down. Details and the reasons for each choice are in [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) (P-03, R-62 to R-66).
+
+- **Least privilege for people.** Each admin task has its own least-privileged Entra role (User Administrator, Authentication Policy Administrator, Privileged Role Administrator, Conditional Access Administrator, Application Developer, Reports Reader, Hybrid Identity Administrator). Each role is held by one dedicated cloud-only admin account, never by a day-to-day account or a user synced from `rtworks.local`, so an on-premises compromise can't reach a cloud admin role.
+- **Emergency access.** Two cloud-only break-glass accounts hold Global Administrator with an active, permanent assignment and passkey (FIDO2) sign-in, tested. The goal is for them to be the only standing Global Administrators (R-63). The Global Administrator account used during setup was retired (role removed, sign-in blocked, not deleted).
+- **MFA everywhere.** The tenant is on Entra ID Free with security defaults off (P-02), so per-user MFA is enforced on every admin and emergency access account and on all 100 synced users (password hash sync is on). The synced-user change was made through Microsoft Graph with a `-WhatIf` dry run first, and each change was read back.
+- **Read-only Graph access for admins.** Tenant-wide consent was granted only for the named delegated scopes the checks need, through the admin consent endpoint.
+- **Recorded exceptions.** Steps that had to be done by a Global Administrator before any admin role existed are written up as a bootstrap exception, and one step done by the wrong account is recorded as a deviation rather than redone.
 
 ## What is scripted and what is not
 
@@ -194,7 +211,9 @@ The unit tests mock Active Directory, so they check what each script *does* (whi
 
 ## Roadmap
 
-Planned next phase: GitHub Actions signs in to Entra with an OIDC federated credential (no stored secret), deploys Conditional Access policies in report-only mode, and Pester tests read the policy state back through Microsoft Graph. See `docs/REQUIREMENTS.md`.
+Phase 3 (in progress): GitHub Actions signs in to Entra with an OIDC federated credential (no stored secret), deploys Conditional Access policies in report-only mode, and Pester tests read the policy state back through Microsoft Graph. Two app registrations keep reading and deploying apart, each with only the Graph permissions it needs.
+
+Everything that works on Entra ID Free is built and tested first. Conditional Access needs Entra ID P1, so the policies are deployed during a 30-day Microsoft 365 E5 trial (which includes Entra ID P2), with recurring billing off from day 1. Before the trial ends, the policies are disabled and the tenant goes back to Free with security defaults on. See `docs/REQUIREMENTS.md` (R-66).
 
 ## Credits
 
