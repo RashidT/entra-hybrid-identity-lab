@@ -48,5 +48,6 @@ Finish
 | `leaver-group-audit.png` | Entra audit log: the leaver removed from its department group | R-16 (supporting) |
 | `leaver-provisioning-log.png` | Cloud Sync provisioning log: the update from AD, with `accountEnabled` set to false | R-16 (supporting) |
 | `breakglass-role-audit.png` | Entra audit log (Core Directory, RoleManagement): both `Add member to role` entries with initiator and targets, plus each entry's Modified Properties showing Global Administrator (`TenantAdmins`). Evidence for the bootstrap exception | R-62, P-03 |
+| `admin-roles-audit.png` | Entra audit log (Core Directory, RoleManagement), filtered to Initiated by the Privileged Role Administrator and viewed as the Reports Reader account. Two stacked captures: 7 `Add member to role` entries (one role per `adm-` account, plus the mistaken add to the lab user `marcus.lee`) and 5 `Remove member from role` entries (the first roles from `maya.patel` and `elena.brooks`, Conditional Access Administrator from `marcus.lee`, and Global Administrator and Billing Administrator from the setup Global Administrator). Evidence for the role hand-off, the second deviation and the retirement | R-62 |
 
 The `06-Set-UserUPN.ps1 -LogPath` CSV and the output of `05-Update-ADUsers.ps1` are text, so they can be committed as files. Check them for real names or addresses first.
