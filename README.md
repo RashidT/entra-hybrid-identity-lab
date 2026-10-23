@@ -11,7 +11,7 @@ I built this while preparing for SC-300 (passed October 2026).
 | 1. Hybrid identity | AD forest synced to Entra with Cloud Sync; UPN migration to the tenant suffix | Done, evidenced |
 | 2. Joiner / mover / leaver | PowerShell JML scripts, Pester unit tests, CI on every push | Done, evidenced |
 | Tenant security baseline | Least-privilege admin roles, two emergency access accounts, MFA on every account | Done; screenshots being added |
-| 3. Automation with Microsoft Graph | GitHub Actions signs in with OIDC (no stored secret), deploys Conditional Access policies in report-only mode, Pester reads them back through Graph | In progress |
+| 3. Automation with Microsoft Graph | GitHub Actions signs in with OIDC (no stored secret), deploys Conditional Access policies in report-only mode, Pester reads them back through Graph; B2B guest access at least privilege | In progress |
 
 ## What the lab shows
 
@@ -214,6 +214,8 @@ The unit tests mock Active Directory, so they check what each script *does* (whi
 Phase 3 (in progress): GitHub Actions signs in to Entra with an OIDC federated credential (no stored secret), deploys Conditional Access policies in report-only mode, and Pester tests read the policy state back through Microsoft Graph. Two app registrations keep reading and deploying apart, each with only the Graph permissions it needs.
 
 Everything that works on Entra ID Free is built and tested first. Conditional Access needs Entra ID P1, so the policies are deployed during a 30-day Microsoft 365 E5 trial (which includes Entra ID P2), with recurring billing off from day 1. Before the trial ends, the policies are disabled and the tenant goes back to Free with security defaults on. See `docs/REQUIREMENTS.md` (R-66).
+
+Phase 3 also covers B2B: one test guest invited by a Guest Inviter account, external collaboration settings at least privilege, and a report-only MFA policy for guests (R-67 to R-71). No Azure subscription is linked for the lab.
 
 ## Credits
 
