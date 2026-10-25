@@ -52,6 +52,7 @@ Finish
 | `creator-ga-removal-audit.png` | Entra audit log, viewed as the Reports Reader account: `Remove member from role`, Global Administrator, from the tenant creator, initiated by the Privileged Role Administrator (2026-10-24). Evidence that only the emergency access accounts are standing Global Administrators | R-63 |
 | `creator-roles-after.png` | The tenant creator's **Assigned roles**: Billing Administrator only | R-63 |
 | `admin-roles.png` | **Roles & admins > All roles**, viewed as the Privileged Role Administrator: Global Administrator 2 holders, every other role in the R-62 table 1. Directory Readers 1 is the Microsoft service principal `Microsoft.Azure.SyncFabric` (see R-62) | R-62 |
+| `per-user-mfa-enforced.png` | **Per-user multifactor authentication**, viewed as the Authentication Policy Administrator: all eleven admin and emergency access accounts **enforced**, in four stacked searches: the seven `adm-` accounts, the two emergency access accounts, the tenant creator and the setup Global Administrator (the last two labelled, names redacted) | R-65 |
 | `setup-ga-retired.png` | The setup Global Administrator, viewed as the Privileged Role Administrator: **Assigned roles** showing "No directory roles assigned", then its properties showing **Account enabled: No**. Evidence that it was retired (roles removed, sign-in blocked, not deleted) | R-62 |
 
 The `06-Set-UserUPN.ps1 -LogPath` CSV and the output of `05-Update-ADUsers.ps1` are text, so they can be committed as files. Check them for real names or addresses first.
