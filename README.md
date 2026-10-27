@@ -79,7 +79,7 @@ graph TD
         Agent["Entra Cloud Sync<br/>provisioning agent"]
         AD --> Agent
     end
-    Agent -->|"HTTPS (443)"| Entra["Microsoft Entra tenant<br/><tenant>.onmicrosoft.com"]
+    Agent -->|"HTTPS (443)"| Entra["Microsoft Entra tenant<br/>#lt;tenant#gt;.onmicrosoft.com"]
 ```
 
 ## Prerequisites
