@@ -64,6 +64,7 @@ entra-hybrid-identity-lab/
 │   ├── TestSetup.ps1                    # Stand-in AD cmdlets for machines without RSAT
 │   ├── Data.Tests.ps1                   # Helpers and users.csv
 │   ├── Scripts.Tests.ps1                # Mocked tests for scripts 01-06
+│   ├── Graph.Tests.ps1                  # Reads tenant settings through Graph (R-69)
 │   └── IdentityLab.Integration.Tests.ps1  # Needs a real domain controller
 ├── PSScriptAnalyzerSettings.psd1
 ├── LICENSE
@@ -202,6 +203,9 @@ Invoke-ScriptAnalyzer -Path .\scripts -Settings .\PSScriptAnalyzerSettings.psd1
 
 # Unit tests (no domain controller needed)
 Invoke-Pester -Path .\tests -ExcludeTag Integration
+
+# Graph tests (connected with Connect-MgGraph -Scopes Policy.Read.All)
+Invoke-Pester -Path .\tests\Graph.Tests.ps1 -Tag Graph
 
 # Integration tests (on a domain controller or RSAT workstation)
 Invoke-Pester -Path .\tests\IdentityLab.Integration.Tests.ps1 -Tag Integration

@@ -123,6 +123,7 @@ Safeguards: every script supports `-WhatIf`, validates all input before changing
 - **PSScriptAnalyzer** runs on `scripts/` in CI and fails on any finding.
 - **Unit tests** (`tests/Data.Tests.ps1`, `tests/Scripts.Tests.ps1`) run in GitHub Actions without a domain controller. Active Directory is mocked, so they check which commands each script calls and with what, not the state of a real directory.
 - **Integration tests** (`tests/IdentityLab.Integration.Tests.ps1`, tagged `Integration`) run on a domain controller and check the real OUs, groups and users. They also confirm that `05 -WhatIf` finds nothing to change.
+- **Graph tests** (`tests/Graph.Tests.ps1`, tagged `Graph`) read tenant settings back through Microsoft Graph v1.0 with read-only permissions and fail on drift. They're skipped unless the session has `Policy.Read.All`, so the CI `test` job reports them as skipped.
 
 - **Reruns on the real domain:** a second run of 06 changed nothing (`0 updated, 100 unchanged`).
 
