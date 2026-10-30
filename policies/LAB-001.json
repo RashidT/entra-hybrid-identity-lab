@@ -22,7 +22,9 @@
         "cf1c38e5-3621-4004-a7cb-879624dced7c",
         "4a5d8f65-41da-4de4-8968-e035b65339cf",
         "8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2",
-        "95e79109-95c0-4d8e-aee3-d01accf2d47b"
+        "95e79109-95c0-4d8e-aee3-d01accf2d47b",
+        "45d8d3c5-c802-45c6-b32a-1d70b5e1e86e",
+        "5d6b6bb7-de71-4623-b4af-96380a352509"
       ],
       "excludeGroups": [
         "{{EmergencyAccessGroupId}}"
