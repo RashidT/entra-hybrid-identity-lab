@@ -1,0 +1,28 @@
+{
+  "displayName": "LAB-003 Require MFA for IT-Security-Group",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "users": {
+      "includeGroups": [
+        "{{ItSecurityGroupId}}"
+      ],
+      "excludeGroups": [
+        "{{EmergencyAccessGroupId}}"
+      ]
+    },
+    "applications": {
+      "includeApplications": [
+        "All"
+      ]
+    },
+    "clientAppTypes": [
+      "all"
+    ]
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [
+      "mfa"
+    ]
+  }
+}

@@ -52,6 +52,7 @@ entra-hybrid-identity-lab/
 │   ├── REQUIREMENTS.md                  # Testable requirements for this repo
 │   ├── architecture.md
 │   └── images/                          # Screenshots and evidence
+├── policies/                            # Conditional Access definitions, LAB-001 to LAB-004 (report-only, not deployed yet)
 ├── scripts/
 │   ├── LabCommon.ps1                    # Shared helpers (CSV validation, DN helpers)
 │   ├── 01-Initialize-OUStructure.ps1    # Creates OU=CorpUsers
