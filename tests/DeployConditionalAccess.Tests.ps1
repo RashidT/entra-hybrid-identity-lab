@@ -132,53 +132,72 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
 
     BeforeEach {
         # Plain (not $script:) variable, so the mock and the helpers find the same fake tenant.
+        # Calls records every Graph request as plain strings. Tests assert on Calls instead of using
+        # -ParameterFilter on Body or Uri, which didn't match on the CI runner (Pester 6.2.0, Windows).
         $fake = @{
             Tenant       = New-Object -TypeName System.Collections.Generic.List[object]
+            Calls        = New-Object -TypeName System.Collections.Generic.List[object]
             NextId       = 0
             PageSize     = 0
             PatchApplies = $true
+            FailPostLike = ''
+            Sleeps       = 0
         }
 
         Mock Get-MgContext { [pscustomobject]@{ Account = $null; AppName = 'lab-ca-deployer' } }
-        Mock Start-Sleep { }
+        Mock Start-Sleep { $fake.Sleeps++ }
 
         # The fake tenant. GET lists (with optional paging) or reads one; POST creates; PATCH replaces
-        # each top-level key sent. DELETE is never expected, and fails the test if called.
+        # each top-level key sent. Any other method fails the call.
         Mock Invoke-MgGraphRequest {
             $base = 'v1.0/identity/conditionalAccess/policies'
-            switch ($Method) {
+            $m = ([string]$Method).ToUpperInvariant()
+            $u = [string]$Uri
+            $b = ''
+            if ($null -ne $Body) { $b = [string]$Body }
+            $fake.Calls.Add([pscustomobject]@{ Method = $m; Uri = $u; Body = $b })
+
+            switch ($m) {
                 'GET' {
-                    if ($Uri -eq $base -or $Uri -like "$base`?page=*") {
+                    if ($u -eq $base -or $u.StartsWith("$base`?page=")) {
                         $all = @($fake.Tenant | ForEach-Object { Copy-TestValue -Value $_ })
                         if ($fake.PageSize -le 0) { return @{ value = $all } }
                         $start = 0
-                        if ($Uri -match 'page=(\d+)') { $start = [int]$Matches[1] }
+                        if ($u -match 'page=(\d+)') { $start = [int]$Matches[1] }
                         $page = @{ value = @($all | Select-Object -Skip $start -First $fake.PageSize) }
                         if ($start + $fake.PageSize -lt $all.Count) { $page['@odata.nextLink'] = "$base`?page=$($start + $fake.PageSize)" }
                         return $page
                     }
-                    $id = $Uri.Substring($base.Length + 1)
+                    $id = $u.Substring($base.Length + 1)
                     $found = @($fake.Tenant | Where-Object { $_['id'] -eq $id })
-                    if ($found.Count -ne 1) { throw "Response status code does not indicate success: NotFound (Not Found)." }
+                    if ($found.Count -ne 1) { throw 'Response status code does not indicate success: NotFound (Not Found).' }
                     return (Copy-TestValue -Value $found[0])
                 }
                 'POST' {
+                    if ($fake.FailPostLike -and $b.Contains($fake.FailPostLike)) { throw 'Forbidden' }
                     $fake.NextId++
-                    $policy = New-TenantPolicy -Definition ($Body | ConvertFrom-Json -AsHashtable) -Id ("bbbbbbbb-0000-0000-0000-{0:d12}" -f $fake.NextId)
+                    $policy = New-TenantPolicy -Definition ($b | ConvertFrom-Json -AsHashtable) -Id ('bbbbbbbb-0000-0000-0000-{0:d12}' -f $fake.NextId)
                     $fake.Tenant.Add($policy)
                     return (Copy-TestValue -Value $policy)
                 }
                 'PATCH' {
-                    $id = $Uri.Substring($base.Length + 1)
+                    $id = $u.Substring($base.Length + 1)
                     $policy = @($fake.Tenant | Where-Object { $_['id'] -eq $id })[0]
                     if ($fake.PatchApplies) {
-                        $patch = $Body | ConvertFrom-Json -AsHashtable
+                        $patch = $b | ConvertFrom-Json -AsHashtable
                         foreach ($key in $patch.Keys) { $policy[$key] = $patch[$key] }
                     }
                     return $null
                 }
-                default { throw "Unexpected Graph method $Method $Uri" }
+                default { throw "Unexpected Graph method $m $u" }
             }
+        }
+
+        # The recorded calls for one method (GET, POST, PATCH), or every call that isn't a GET.
+        function Get-FakeCall {
+            param([string] $Method, [switch] $NotGet)
+            if ($NotGet) { return @($fake.Calls | Where-Object { $_.Method -ne 'GET' }) }
+            return @($fake.Calls | Where-Object { $_.Method -eq $Method })
         }
     }
 
@@ -191,7 +210,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result.Threw | Should -BeTrue
             $result.Error | Should -BeLike '*nothing was changed*'
             $result.Error | Should -BeLike "*LAB-001.json: state is 'enabled'*"
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
 
         It 'reports every bad file at once' {
@@ -201,7 +220,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy -Parameters @{ PolicyPath = $dir }
             $result.Error | Should -BeLike '*LAB-001.json*'
             $result.Error | Should -BeLike '*LAB-002.json*not valid JSON*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
 
         It 'refuses two files with the same displayName' {
@@ -210,7 +229,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy -Parameters @{ PolicyPath = $dir }
             $result.Threw | Should -BeTrue
             $result.Error | Should -BeLike '*used by more than one file*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
 
         It 'refuses a group ID that is not a GUID, without printing the value' {
@@ -218,14 +237,14 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result.Threw | Should -BeTrue
             $result.Error | Should -BeLike "*'ItSecurityGroupId' is not a GUID*"
             $result.Error | Should -Not -BeLike '*not-a-guid-value*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
 
         It 'stops when the folder has no LAB- definitions' {
             $dir = New-TestPolicyFolder -Files @{ 'README.txt' = 'nothing here' }
             $result = Invoke-Deploy -Parameters @{ PolicyPath = $dir }
             $result.Error | Should -BeLike '*No LAB-*.json*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
 
         It 'stops when there is no Graph connection' {
@@ -233,7 +252,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy
             $result.Threw | Should -BeTrue
             $result.Error | Should -BeLike '*Not connected to Microsoft Graph*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It
+            $fake.Calls.Count | Should -Be 0
         }
     }
 
@@ -243,44 +262,52 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy
             $result.Threw | Should -BeFalse -Because $result.Error
             @($result.Output | Where-Object { $_.Action -eq 'Created' }).Count | Should -Be $script:PolicyCount
-            Should -Invoke Invoke-MgGraphRequest -Times $script:PolicyCount -Exactly -Scope It -ParameterFilter { $Method -eq 'POST' }
-            Should -Invoke Invoke-MgGraphRequest -Times $script:PolicyCount -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'POST' -and $Body -like '*"enabledForReportingButNotEnforced"*' -and
-                $Body -like "*$($script:EaId)*" -and $Body -notlike '*{{*'
+            $posts = Get-FakeCall -Method 'POST'
+            $posts.Count | Should -Be $script:PolicyCount
+            foreach ($post in $posts) {
+                $body = $post.Body | ConvertFrom-Json -AsHashtable
+                $body['state'] | Should -BeExactly 'enabledForReportingButNotEnforced'
+                $body['conditions']['users']['excludeGroups'] | Should -Contain $script:EaId
+                $post.Body.Contains('{{') | Should -BeFalse -Because 'every placeholder is filled (R-58)'
             }
         }
 
         It 'sends only the four definition keys when creating' {
             Invoke-Deploy | Out-Null
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'POST' -and @(($Body | ConvertFrom-Json -AsHashtable).Keys | Where-Object { $_ -notin 'displayName', 'state', 'conditions', 'grantControls' }).Count -gt 0
+            $posts = Get-FakeCall -Method 'POST'
+            $posts.Count | Should -Be $script:PolicyCount
+            foreach ($post in $posts) {
+                @(($post.Body | ConvertFrom-Json -AsHashtable).Keys | Sort-Object) -join ',' |
+                    Should -Be 'conditions,displayName,grantControls,state'
             }
         }
 
         It 'reports a re-run as unchanged and makes no change (idempotent)' {
             Invoke-Deploy | Out-Null
+            $before = (Get-FakeCall -NotGet).Count
             $second = Invoke-Deploy
             $second.Threw | Should -BeFalse -Because $second.Error
             @($second.Output | Where-Object { $_.Action -eq 'NoChange' }).Count | Should -Be $script:PolicyCount
             Get-SummaryLine -Result $second | Should -BeLike '*0 created, 0 updated*unchanged*0 failed*'
-            Should -Invoke Invoke-MgGraphRequest -Times $script:PolicyCount -Exactly -Scope It -ParameterFilter { $Method -eq 'POST' }
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -eq 'PATCH' }
+            (Get-FakeCall -NotGet).Count | Should -Be $before -Because 'the second run makes no change'
+            (Get-FakeCall -Method 'POST').Count | Should -Be $script:PolicyCount
+            (Get-FakeCall -Method 'PATCH').Count | Should -Be 0
         }
 
         It 'reads each new policy back before reporting Created (R-01)' {
             Invoke-Deploy | Out-Null
-            Should -Invoke Invoke-MgGraphRequest -Times $script:PolicyCount -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'GET' -and $Uri -like 'v1.0/identity/conditionalAccess/policies/*'
-            }
+            $readBacks = @(Get-FakeCall -Method 'GET' | Where-Object { $_.Uri.StartsWith('v1.0/identity/conditionalAccess/policies/') })
+            $readBacks.Count | Should -Be $script:PolicyCount
         }
 
         It 'carries on after one create fails, then ends with an error' {
-            Mock Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' -and $Body -like '*LAB-002*' } { throw 'Forbidden' }
+            $fake.FailPostLike = 'LAB-002'
             $result = Invoke-Deploy
             $result.Threw | Should -BeTrue
             $result.Error | Should -BeLike '1 of * failed*'
-            ($result.Output | Where-Object { $_.Policy -like 'LAB-002*' }).Action | Should -Be 'Failed'
-            ($result.Output | Where-Object { $_.Policy -like 'LAB-002*' }).Detail | Should -Be 'Forbidden'
+            $row = $result.Output | Where-Object { $_.Policy -like 'LAB-002*' }
+            $row.Action | Should -Be 'Failed'
+            $row.Detail | Should -Be 'Forbidden'
             @($result.Output | Where-Object { $_.Action -eq 'Created' }).Count | Should -Be ($script:PolicyCount - 1)
         }
     }
@@ -296,13 +323,14 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $row = $result.Output | Where-Object { $_.Policy -eq $name }
             $row.Action | Should -Be 'Updated'
             $row.ChangedKeys | Should -Be 'grantControls'
-            Should -Invoke Invoke-MgGraphRequest -Times 1 -Exactly -Scope It -ParameterFilter { $Method -eq 'PATCH' }
-            Should -Invoke Invoke-MgGraphRequest -Times 1 -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'PATCH' -and $Uri -like '*/aaaaaaaa-0000-0000-0000-000000000001' -and
-                (@(($Body | ConvertFrom-Json -AsHashtable).Keys) -join ',') -eq 'grantControls' -and
-                ($Body | ConvertFrom-Json -AsHashtable)['grantControls']['operator'] -eq 'OR'
-            }
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -eq 'POST' }
+            $patches = Get-FakeCall -Method 'PATCH'
+            $patches.Count | Should -Be 1
+            $patches[0].Uri | Should -BeExactly 'v1.0/identity/conditionalAccess/policies/aaaaaaaa-0000-0000-0000-000000000001'
+            $body = $patches[0].Body | ConvertFrom-Json -AsHashtable
+            @($body.Keys) -join ',' | Should -Be 'grantControls'
+            $body['grantControls']['operator'] | Should -Be 'OR' -Because 'the changed key is sent whole (Option A)'
+            $body['grantControls']['builtInControls'] | Should -Contain 'mfa'
+            (Get-FakeCall -Method 'POST').Count | Should -Be 0
         }
 
         It 'puts a policy someone switched On back to report-only' {
@@ -310,9 +338,10 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $fake.Tenant[1]['state'] = 'enabled'
             $result = Invoke-Deploy
             $result.Threw | Should -BeFalse -Because $result.Error
-            Should -Invoke Invoke-MgGraphRequest -Times 1 -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'PATCH' -and ($Body | ConvertFrom-Json -AsHashtable)['state'] -eq 'enabledForReportingButNotEnforced'
-            }
+            $patches = Get-FakeCall -Method 'PATCH'
+            $patches.Count | Should -Be 1
+            ($patches[0].Body | ConvertFrom-Json -AsHashtable)['state'] | Should -BeExactly 'enabledForReportingButNotEnforced'
+            $fake.Tenant[1]['state'] | Should -BeExactly 'enabledForReportingButNotEnforced'
         }
 
         It 'treats extra unset properties, array order and GUID case as unchanged' {
@@ -325,7 +354,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy
             $result.Threw | Should -BeFalse -Because $result.Error
             @($result.Output | Where-Object { $_.Action -eq 'NoChange' }).Count | Should -Be $script:PolicyCount
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -in 'POST', 'PATCH' }
+            (Get-FakeCall -NotGet).Count | Should -Be 0
         }
 
         It 'reports Failed when the read-back still differs after the retries' {
@@ -334,8 +363,10 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $fake.PatchApplies = $false
             $result = Invoke-Deploy -Parameters @{ ReadBackAttempts = 3 }
             $result.Threw | Should -BeTrue
-            ($result.Output | Where-Object { $_.Action -eq 'Failed' }).Detail | Should -BeLike '*read-back still differs in: state*'
-            Should -Invoke Start-Sleep -Times 2 -Exactly -Scope It
+            $row = $result.Output | Where-Object { $_.Action -eq 'Failed' }
+            @($row).Count | Should -Be 1
+            $row.Detail | Should -BeLike '*read-back still differs in: state*'
+            $fake.Sleeps | Should -Be 2 -Because 'three attempts wait twice'
         }
 
         It 'finds a policy on a later page of the list' {
@@ -344,7 +375,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result = Invoke-Deploy
             $result.Threw | Should -BeFalse -Because $result.Error
             @($result.Output | Where-Object { $_.Action -eq 'NoChange' }).Count | Should -Be $script:PolicyCount
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -eq 'POST' }
+            (Get-FakeCall -NotGet).Count | Should -Be 0
         }
     }
 
@@ -364,11 +395,10 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $row = $result.Output | Where-Object { $_.Policy -eq $name }
             $row.Action | Should -Be 'Failed'
             $row.Detail | Should -BeLike '*2 tenant policies are named*Nothing was changed*'
-            Should -Invoke Invoke-MgGraphRequest -Times 1 -Exactly -Scope It -ParameterFilter { $Method -eq 'PATCH' }
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter {
-                $Method -eq 'PATCH' -and ($Uri -like '*/aaaaaaaa-0000-0000-0000-000000000001' -or $Uri -like '*/cccccccc-*')
-            }
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -eq 'POST' }
+            $patches = Get-FakeCall -Method 'PATCH'
+            $patches.Count | Should -Be 1 -Because 'only the other drifted policy is updated'
+            $patches[0].Uri | Should -BeExactly 'v1.0/identity/conditionalAccess/policies/aaaaaaaa-0000-0000-0000-000000000002'
+            (Get-FakeCall -Method 'POST').Count | Should -Be 0
         }
     }
 
@@ -385,7 +415,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result.Threw | Should -BeFalse -Because $result.Error
             ($result.Output | Where-Object { $_.Policy -eq 'LAB-999 Old policy' }).Action | Should -Be 'NotInRepo'
             Get-SummaryLine -Result $result | Should -BeLike '*1 LAB- in tenant not in repo*'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -notin 'GET' }
+            (Get-FakeCall -NotGet).Count | Should -Be 0
             $fake.Tenant.Count | Should -Be ($script:PolicyCount + 1)
         }
     }
@@ -397,7 +427,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $result.Threw | Should -BeFalse -Because $result.Error
             @($result.Output | Where-Object { $_.Action -eq 'WouldCreate' }).Count | Should -Be $script:PolicyCount
             Get-SummaryLine -Result $result | Should -BeLike "*$($script:PolicyCount) would create, 0 would update (WhatIf)*"
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -ne 'GET' }
+            (Get-FakeCall -NotGet).Count | Should -Be 0
         }
 
         It 'reports would-update with the changed keys and makes no change' {
@@ -408,7 +438,7 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $row = $result.Output | Where-Object { $_.Action -eq 'WouldUpdate' }
             @($row).Count | Should -Be 1
             $row.ChangedKeys | Should -Be 'state'
-            Should -Invoke Invoke-MgGraphRequest -Times 0 -Exactly -Scope It -ParameterFilter { $Method -ne 'GET' }
+            (Get-FakeCall -NotGet).Count | Should -Be 0
             $fake.Tenant[0]['state'] | Should -Be 'enabled'
         }
     }
@@ -420,9 +450,9 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $fake.Tenant[0]['state'] = 'enabled'
             $result = Invoke-Deploy
             $text = (@($result.Output | ForEach-Object { $_ | ConvertTo-Json -Compress }) + @($result.Information) + @($result.Error)) -join "`n"
-            $text | Should -Not -BeLike "*$($script:EaId)*"
-            $text | Should -Not -BeLike "*$($script:ItId)*"
-            $text | Should -Not -BeLike '*aaaaaaaa-0000*'
+            $text.Contains($script:EaId) | Should -BeFalse
+            $text.Contains($script:ItId) | Should -BeFalse
+            $text.Contains('aaaaaaaa-0000') | Should -BeFalse
         }
     }
 }
