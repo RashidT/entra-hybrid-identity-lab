@@ -4,6 +4,8 @@ A hands-on lab that connects an on-premises Active Directory forest (`rtworks.lo
 
 I built this while preparing for SC-300 (passed October 2026).
 
+**Built with:** PowerShell (Windows PowerShell 5.1 and PowerShell 7), the `ActiveDirectory` module for on-premises work, and the Microsoft Graph PowerShell SDK for everything in Entra. No deprecated AzureAD or MSOnline modules are used.
+
 ## Project status
 
 | Phase | Scope | Status |
@@ -41,32 +43,39 @@ Set up before Phase 3, so the automation runs in a tenant that is already locked
 | Forest, domain controller and Hyper-V VM | Built by hand, following Microsoft's *Building a basic Active Directory environment* tutorial (see Credits). Not scripted. |
 | Cloud Sync agent install and configuration | Done by hand in the Entra admin center. Script 04 only *checks* the agent's health. |
 | OU, UPN suffix, users, groups, updates, UPN change | Scripts 01, 02, 03, 05 and 06. |
+| Conditional Access policies | Script 07 deploys `policies/` in report-only mode. Built and unit-tested; not run against the tenant yet. |
 
 ## Repository structure
 
 ```
 entra-hybrid-identity-lab/
-├── .github/workflows/pester-tests.yml   # CI: script analysis + unit tests
-├── data/users.csv                       # 100 sample users (no passwords)
+├── .github/workflows/pester-tests.yml           # CI: script analysis + unit tests
+├── data/users.csv                               # 100 sample users (no passwords)
 ├── docs/
-│   ├── REQUIREMENTS.md                  # Testable requirements for this repo
+│   ├── REQUIREMENTS.md                          # Testable requirements for this repo
 │   ├── architecture.md
-│   └── images/                          # Screenshots and evidence
-├── policies/                            # Conditional Access definitions, LAB-001 to LAB-004 (report-only, not deployed yet)
+│   ├── upn-migration.csv                        # UPN migration log, before and after
+│   └── images/                                  # Screenshots and evidence
+├── policies/                                    # Conditional Access definitions, LAB-001 to LAB-004 (report-only, not deployed yet)
 ├── scripts/
-│   ├── LabCommon.ps1                    # Shared helpers (CSV validation, DN helpers)
-│   ├── 01-Initialize-OUStructure.ps1    # Creates OU=CorpUsers
-│   ├── 02-Configure-UPNSuffixes.ps1     # Registers a UPN suffix in the forest
-│   ├── 03-BulkImport-Users.ps1          # Department OUs, groups and users from the CSV
-│   ├── 04-Test-CloudSyncAgent.ps1       # Read-only health check of the sync agent
-│   ├── 05-Update-ADUsers.ps1            # Movers and leavers: brings AD back in line with the CSV
-│   └── 06-Set-UserUPN.ps1               # Moves users to a new UPN suffix
+│   ├── LabCommon.ps1                            # Shared helpers (CSV validation, DN helpers)
+│   ├── ConditionalAccessCommon.ps1              # Shared policy rules for 07 and the Graph tests (check, fill placeholders, compare)
+│   ├── 01-Initialize-OUStructure.ps1            # Creates OU=CorpUsers
+│   ├── 02-Configure-UPNSuffixes.ps1             # Registers a UPN suffix in the forest
+│   ├── 03-BulkImport-Users.ps1                  # Department OUs, groups and users from the CSV
+│   ├── 04-Test-CloudSyncAgent.ps1               # Read-only health check of the sync agent
+│   ├── 05-Update-ADUsers.ps1                    # Movers and leavers: brings AD back in line with the CSV
+│   ├── 06-Set-UserUPN.ps1                       # Moves users to a new UPN suffix
+│   └── 07-Deploy-ConditionalAccessPolicies.ps1  # Deploys the LAB- policies in report-only mode; never deletes
 ├── tests/
-│   ├── TestSetup.ps1                    # Stand-in AD cmdlets for machines without RSAT
-│   ├── Data.Tests.ps1                   # Helpers and users.csv
-│   ├── Scripts.Tests.ps1                # Mocked tests for scripts 01-06
-│   ├── Graph.Tests.ps1                  # Reads tenant settings through Graph (R-69)
-│   └── IdentityLab.Integration.Tests.ps1  # Needs a real domain controller
+│   ├── TestSetup.ps1                            # Stand-in AD cmdlets for machines without RSAT
+│   ├── Data.Tests.ps1                           # Helpers and users.csv
+│   ├── Scripts.Tests.ps1                        # Mocked tests for scripts 01-06
+│   ├── ConditionalAccess.Tests.ps1              # Shared policy rules and the policies/ JSON files
+│   ├── DeployConditionalAccess.Tests.ps1        # Script 07 against a fake tenant (mocked Graph)
+│   ├── PolicyFiles.Tests.ps1                    # No tenant-specific values in policies/ (R-58)
+│   ├── Graph.Tests.ps1                          # Reads tenant settings through Graph (R-69)
+│   └── IdentityLab.Integration.Tests.ps1        # Needs a real domain controller
 ├── PSScriptAnalyzerSettings.psd1
 ├── LICENSE
 └── README.md
@@ -88,6 +97,7 @@ graph TD
 
 - A working forest and domain controller (see the first Microsoft tutorial under Credits).
 - The `ActiveDirectory` PowerShell module (installed on a domain controller, or through RSAT).
+- For the Entra scripts and tests (script 07, `Graph.Tests.ps1`): the Microsoft Graph PowerShell SDK, and PowerShell 7 for script 07. Only its `Microsoft.Graph.Authentication` module is needed: the scripts sign in with `Connect-MgGraph` and call the Graph REST API through `Invoke-MgGraphRequest`.
 - Rights to create OUs, users and groups. Script 02 changes the forest, so it needs Enterprise Admins.
 - Pester 6.2.0 and PSScriptAnalyzer 1.24.0 to run the checks locally. CI uses the same versions.
 - Works on Windows PowerShell 5.1 (the lab DC ran every script on 5.1.20348) and PowerShell 7 (CI runs on `pwsh`, `windows-latest`).
