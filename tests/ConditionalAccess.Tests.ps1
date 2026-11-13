@@ -268,3 +268,206 @@ Describe 'Committed policy definitions (R-52)' {
         $definition['displayName'] | Should -BeLike "$([System.IO.Path]::GetFileNameWithoutExtension($Name)) *"
     }
 }
+
+Describe 'Get-LabPolicyReadbackFinding (R-53)' {
+
+    BeforeAll {
+        function New-FilledDefinition {
+            param([string] $Name = 'LAB-999 Test policy')
+            $filled = Resolve-LabPolicyPlaceholder -Definition (New-TestDefinition) -Value @{ EmergencyAccessGroupId = $script:EaId; ItSecurityGroupId = $script:ItId }
+            $filled['displayName'] = $Name
+            return $filled
+        }
+
+        # What a GET returns: the same values plus read-only properties, extra null keys, arrays reordered.
+        function New-TenantCopy {
+            param([System.Collections.IDictionary] $Definition, [string] $Id = '33333333-3333-3333-3333-333333333333')
+            $copy = ($Definition | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable)
+            $copy['id'] = $Id
+            $copy['createdDateTime'] = '2026-11-12T00:00:00Z'
+            $copy['sessionControls'] = $null
+            $copy['conditions']['locations'] = $null
+            $copy['conditions']['users']['excludeUsers'] = @()
+            return $copy
+        }
+    }
+
+    It 'returns nothing when every policy matches its definition' {
+        $a = New-FilledDefinition -Name 'LAB-998 A'
+        $b = New-FilledDefinition -Name 'LAB-999 B'
+        $tenant = @((New-TenantCopy -Definition $b), (New-TenantCopy -Definition $a))
+        @(Get-LabPolicyReadbackFinding -Definition @($a, $b) -TenantPolicy $tenant).Count | Should -Be 0
+    }
+
+    It 'ignores tenant policies that are not LAB- policies' {
+        $a = New-FilledDefinition
+        $other = @{ displayName = 'AB-001 Require MFA'; state = 'enabled' }
+        @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @((New-TenantCopy -Definition $a), $other)).Count | Should -Be 0
+    }
+
+    It 'reports Missing for a definition with no tenant policy' {
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @((New-FilledDefinition)) -TenantPolicy @())
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'Missing'
+        $findings[0].Name | Should -BeExactly 'LAB-999 Test policy'
+    }
+
+    It 'reports Drift once per top-level key that differs, naming the key' {
+        $a = New-FilledDefinition
+        $actual = New-TenantCopy -Definition $a
+        $actual['conditions']['users']['excludeGroups'] = @($script:EaId, '44444444-4444-4444-4444-444444444444')
+        $actual['grantControls']['builtInControls'] = @('block')
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($actual))
+        @($findings.Type | Sort-Object -Unique) | Should -Be @('Drift')
+        @($findings.Key) | Should -Be @('conditions', 'grantControls')
+    }
+
+    It 'reports NotReportOnly, not Drift, when a LAB- policy is <State>' -ForEach @(
+        @{ State = 'enabled' }
+        @{ State = 'disabled' }
+    ) {
+        $a = New-FilledDefinition
+        $actual = New-TenantCopy -Definition $a
+        $actual['state'] = $State
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($actual))
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'NotReportOnly'
+        $findings[0].Key | Should -BeExactly 'state'
+    }
+
+    It 'reports Unexpected for a LAB- tenant policy with no file, whatever the case of the prefix' -ForEach @(
+        @{ Name = 'LAB-005 Someone added this' }
+        @{ Name = 'lab-005 Someone added this' }
+        @{ Name = 'Lab-005 Someone added this' }
+    ) {
+        $extra = @{ displayName = $Name; state = 'enabledForReportingButNotEnforced' }
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @() -TenantPolicy @($extra))
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'Unexpected'
+        $findings[0].Name | Should -BeExactly $Name
+    }
+
+    It 'reports an unexpected LAB- policy that is enforced as both Unexpected and NotReportOnly' {
+        $extra = @{ displayName = 'LAB-005 Someone added this'; state = 'enabled' }
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @() -TenantPolicy @($extra))
+        @($findings.Type | Sort-Object) | Should -Be @('NotReportOnly', 'Unexpected')
+    }
+
+    It 'reports Duplicate and compares neither when two tenant policies share a definition name' {
+        $a = New-FilledDefinition
+        $first = New-TenantCopy -Definition $a
+        $second = New-TenantCopy -Definition $a -Id '55555555-5555-5555-5555-555555555555'
+        $second['state'] = 'enabled'
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($first, $second))
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'Duplicate'
+    }
+
+    It 'reports Duplicate once for an unexpected LAB- name held by two policies' {
+        $extra1 = @{ displayName = 'LAB-005 X'; state = 'enabledForReportingButNotEnforced' }
+        $extra2 = @{ displayName = 'LAB-005 X'; state = 'enabledForReportingButNotEnforced' }
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @() -TenantPolicy @($extra1, $extra2))
+        @($findings | Where-Object Type -EQ 'Duplicate').Count | Should -Be 1
+        @($findings | Where-Object Type -EQ 'Unexpected').Count | Should -Be 2
+    }
+
+    It 'matches the tenant policy by displayName ignoring case, as the deploy does' {
+        $a = New-FilledDefinition
+        $actual = New-TenantCopy -Definition $a
+        $actual['displayName'] = 'lab-999 test policy'
+        @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($actual)).Count | Should -Be 0
+    }
+
+    It 'treats array order and GUID case as no drift' {
+        $a = New-FilledDefinition
+        $a['grantControls']['builtInControls'] = @('mfa', 'compliantDevice')
+        $actual = New-TenantCopy -Definition $a
+        $actual['grantControls']['builtInControls'] = @('compliantDevice', 'mfa')
+        $actual['conditions']['users']['excludeGroups'] = @($script:EaId.ToUpperInvariant())
+        @(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($actual)).Count | Should -Be 0
+    }
+
+    It 'reports every finding in one run' {
+        $a = New-FilledDefinition -Name 'LAB-998 A'
+        $b = New-FilledDefinition -Name 'LAB-999 B'
+        $driftB = New-TenantCopy -Definition $b
+        $driftB['grantControls']['operator'] = 'AND'
+        $extra = @{ displayName = 'LAB-005 X'; state = 'enabledForReportingButNotEnforced' }
+        $findings = @(Get-LabPolicyReadbackFinding -Definition @($a, $b) -TenantPolicy @($driftB, $extra))
+        @($findings.Type | Sort-Object) | Should -Be @('Drift', 'Missing', 'Unexpected')
+    }
+
+    It 'never puts an object ID in a finding (R-58)' {
+        $a = New-FilledDefinition
+        $actual = New-TenantCopy -Definition $a
+        $actual['conditions']['users']['excludeGroups'] = @('44444444-4444-4444-4444-444444444444')
+        $actual['state'] = 'enabled'
+        $text = (@(Get-LabPolicyReadbackFinding -Definition @($a) -TenantPolicy @($actual)) | ConvertTo-Json -Depth 5)
+        $text | Should -Not -Match '[0-9a-f]{8}-[0-9a-f]{4}-'
+    }
+
+    It 'refuses two definitions with the same displayName' {
+        $a = New-FilledDefinition
+        { Get-LabPolicyReadbackFinding -Definition @($a, (New-FilledDefinition)) -TenantPolicy @() } | Should -Throw '*more than one definition*'
+    }
+}
+
+Describe 'Get-LabGroupMemberFinding (R-53, D8)' {
+
+    BeforeAll {
+        $script:BgA = 'aaaaaaaa-0000-0000-0000-000000000001'
+        $script:BgB = 'aaaaaaaa-0000-0000-0000-000000000002'
+        function New-Member {
+            param([string] $Id, [string] $Type = '#microsoft.graph.user')
+            return @{ '@odata.type' = $Type; id = $Id }
+        }
+    }
+
+    It 'returns nothing when the members are exactly the expected users, in any order and case' {
+        $members = @((New-Member -Id $script:BgB.ToUpperInvariant()), (New-Member -Id $script:BgA))
+        @(Get-LabGroupMemberFinding -Member $members -ExpectedId @($script:BgA, $script:BgB)).Count | Should -Be 0
+    }
+
+    It 'reports MemberMissing when an expected member is gone' {
+        $findings = @(Get-LabGroupMemberFinding -Member @((New-Member -Id $script:BgA)) -ExpectedId @($script:BgA, $script:BgB))
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'MemberMissing'
+    }
+
+    It 'reports MemberUnexpected when someone was added' {
+        $members = @((New-Member -Id $script:BgA), (New-Member -Id $script:BgB), (New-Member -Id 'bbbbbbbb-0000-0000-0000-000000000003'))
+        $findings = @(Get-LabGroupMemberFinding -Member $members -ExpectedId @($script:BgA, $script:BgB))
+        $findings.Count | Should -Be 1
+        $findings[0].Type | Should -BeExactly 'MemberUnexpected'
+    }
+
+    It 'catches a swapped member (same count, different person)' {
+        $members = @((New-Member -Id $script:BgA), (New-Member -Id 'bbbbbbbb-0000-0000-0000-000000000003'))
+        @((Get-LabGroupMemberFinding -Member $members -ExpectedId @($script:BgA, $script:BgB)).Type | Sort-Object) |
+            Should -Be @('MemberMissing', 'MemberUnexpected')
+    }
+
+    It 'reports MemberNotUser for a nested group' {
+        $members = @((New-Member -Id $script:BgA), (New-Member -Id $script:BgB), (New-Member -Id 'cccccccc-0000-0000-0000-000000000004' -Type '#microsoft.graph.group'))
+        @((Get-LabGroupMemberFinding -Member $members -ExpectedId @($script:BgA, $script:BgB)).Type | Sort-Object) |
+            Should -Be @('MemberNotUser', 'MemberUnexpected')
+    }
+
+    It 'reports MemberMissing for an empty group' {
+        @((Get-LabGroupMemberFinding -Member @() -ExpectedId @($script:BgA, $script:BgB)).Type) | Should -Be @('MemberMissing')
+    }
+
+    It 'refuses expected IDs that are <Case>' -ForEach @(
+        @{ Case = 'empty'; Ids = @(' ', '') ; Message = '*No expected member IDs*' }
+        @{ Case = 'not GUIDs'; Ids = @('BG-Admin01'); Message = '*not a GUID*' }
+        @{ Case = 'repeated'; Ids = @('aaaaaaaa-0000-0000-0000-000000000001', 'AAAAAAAA-0000-0000-0000-000000000001'); Message = '*duplicate*' }
+    ) {
+        { Get-LabGroupMemberFinding -Member @() -ExpectedId $Ids } | Should -Throw $Message
+    }
+
+    It 'never puts an object ID in a finding (R-58)' {
+        $members = @((New-Member -Id 'bbbbbbbb-0000-0000-0000-000000000003' -Type '#microsoft.graph.group'))
+        $text = (@(Get-LabGroupMemberFinding -Member $members -ExpectedId @($script:BgA)) | ConvertTo-Json -Depth 5)
+        $text | Should -Not -Match '[0-9a-f]{8}-[0-9a-f]{4}-'
+    }
+}

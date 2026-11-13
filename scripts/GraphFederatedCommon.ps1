@@ -8,6 +8,8 @@
         . ./scripts/GraphFederatedCommon.ps1
     Tokens are masked in the GitHub log before anything else is done with them and are never
     written to output (R-58). Only role names and pass/fail lines are printed.
+    Get-LabGraphCollection reads every page of a Graph list; it works with any Graph connection,
+    so the R-53 read-back tests also run locally with a delegated sign-in.
     Needs PowerShell 7 and Microsoft.Graph.Authentication (Connect-MgGraph, Invoke-MgGraphRequest).
 #>
 
@@ -222,4 +224,38 @@ function Assert-LabAppHasNoCredential {
         throw "Credentials found on: $(@($problems) -join ', '). R-50: the app must have no secret or certificate."
     }
     Write-Information -MessageData 'PASS: no secret or certificate on the application or service principal (R-50).' -InformationAction Continue
+}
+
+function Get-LabGraphCollection {
+    <#
+    .SYNOPSIS
+        Returns every item of a Graph list, following @odata.nextLink to the last page.
+    .DESCRIPTION
+        Items are returned as hashtables (-OutputType HashTable). Stops with an error after
+        -MaxPage pages, so a looping nextLink can't hang the job. The URI is never written to
+        output, because it can hold an object ID (R-58).
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.IDictionary])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Uri,
+
+        [ValidateRange(1, 1000)]
+        [int] $MaxPage = 100
+    )
+
+    $next = $Uri
+    $pages = 0
+    while ($next) {
+        $pages++
+        if ($pages -gt $MaxPage) {
+            throw "Graph list has more than $MaxPage pages; stopped."
+        }
+        $page = Invoke-MgGraphRequest -Method GET -Uri $next -OutputType HashTable -ErrorAction Stop
+        foreach ($item in @($page['value'])) {
+            if ($null -ne $item) { $item }
+        }
+        $next = [string]$page['@odata.nextLink']
+    }
 }

@@ -278,3 +278,173 @@ function Get-LabPolicyPatchBody {
     }
     return $body
 }
+
+function ConvertTo-LabReadbackFinding {
+    <#
+    .SYNOPSIS
+        One R-53 read-back finding. Names a policy or group and a key, never an object ID (R-58).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Type,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Name,
+
+        [string] $Key = '',
+
+        [Parameter(Mandatory = $true)]
+        [string] $Message
+    )
+
+    return [pscustomobject]@{ Type = $Type; Name = $Name; Key = $Key; Message = $Message }
+}
+
+function Get-LabPolicyReadbackFinding {
+    <#
+    .SYNOPSIS
+        Compares the filled-in definitions with every tenant policy and returns the R-53 findings.
+        No output means the tenant matches the repo.
+    .DESCRIPTION
+        Policies are matched by displayName as the deploy matches them (R-57, case-insensitive), and
+        compared with Get-LabPolicyDifference, so the deploy and the read-back can't disagree.
+        Finding types:
+          Missing        a definition with no tenant policy
+          Duplicate      more than one tenant policy with the same LAB- name (none of them compared)
+          NotReportOnly  a LAB- tenant policy whose state isn't enabledForReportingButNotEnforced
+          Drift          one per top-level key that differs (state is reported as NotReportOnly instead)
+          Unexpected     a tenant policy whose name starts with LAB- (any case) and has no definition
+        Pass the definitions after Resolve-LabPolicyPlaceholder. No Graph call is made.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [System.Collections.IDictionary[]] $Definition,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]] $TenantPolicy
+    )
+
+    $reportOnly = 'enabledForReportingButNotEnforced'
+    $tenant = @($TenantPolicy | Where-Object { $_ -is [System.Collections.IDictionary] })
+    $repoNames = @($Definition | ForEach-Object { [string]$_['displayName'] })
+
+    $repeated = @($repoNames | Group-Object | Where-Object { $_.Count -gt 1 })
+    if ($repeated.Count -gt 0) {
+        throw "displayName used by more than one definition: $(($repeated.Name) -join ', ')."
+    }
+
+    $findings = New-Object -TypeName System.Collections.Generic.List[object]
+
+    foreach ($item in $Definition) {
+        $name = [string]$item['displayName']
+        $matched = @($tenant | Where-Object { [string]$_['displayName'] -eq $name })
+
+        if ($matched.Count -eq 0) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'Missing' -Name $name -Message 'No tenant policy has this displayName.'))
+            continue
+        }
+        if ($matched.Count -gt 1) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'Duplicate' -Name $name -Message "$($matched.Count) tenant policies have this displayName; none was compared."))
+            continue
+        }
+
+        $actual = $matched[0]
+        $changed = @(Get-LabPolicyDifference -Definition $item -Actual $actual)
+        if ([string]$actual['state'] -cne $reportOnly) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'NotReportOnly' -Name $name -Key 'state' -Message "State is '$($actual['state'])', not '$reportOnly'."))
+            $changed = @($changed | Where-Object { $_ -cne 'state' })
+        }
+        foreach ($key in $changed) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'Drift' -Name $name -Key $key -Message "'$key' differs from the definition."))
+        }
+    }
+
+    $unexpected = @($tenant | Where-Object {
+            $policyName = [string]$_['displayName']
+            $policyName.StartsWith('LAB-', [System.StringComparison]::OrdinalIgnoreCase) -and ($repoNames -notcontains $policyName)
+        })
+    foreach ($group in @($unexpected | Group-Object -Property { [string]$_['displayName'] })) {
+        if ($group.Count -gt 1) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'Duplicate' -Name $group.Name -Message "$($group.Count) tenant policies have this displayName."))
+        }
+        foreach ($policy in $group.Group) {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'Unexpected' -Name $group.Name -Message 'LAB- tenant policy with no definition in policies/.'))
+            if ([string]$policy['state'] -cne $reportOnly) {
+                $findings.Add((ConvertTo-LabReadbackFinding -Type 'NotReportOnly' -Name $group.Name -Key 'state' -Message "State is '$($policy['state'])', not '$reportOnly'."))
+            }
+        }
+    }
+
+    return $findings.ToArray()
+}
+
+function Get-LabGroupMemberFinding {
+    <#
+    .SYNOPSIS
+        Checks a group's direct members against the expected object IDs (R-53, D8).
+        No output means the members are exactly the expected users.
+    .DESCRIPTION
+        Members are what Graph returns from /groups/{id}/members: each needs 'id' and '@odata.type'.
+        Finding types: MemberNotUser (a member that isn't a user, for example a nested group),
+        MemberMissing and MemberUnexpected (counts only). No ID is ever put in a finding (R-58).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]] $Member,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]] $ExpectedId,
+
+        [string] $GroupName = 'EmergencyAccess'
+    )
+
+    $expected = @($ExpectedId | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($expected.Count -eq 0) {
+        throw "No expected member IDs for $GroupName."
+    }
+    foreach ($id in $expected) {
+        $parsed = [guid]::Empty
+        if (-not [guid]::TryParse($id, [ref]$parsed)) {
+            throw "An expected member ID for $GroupName is not a GUID."
+        }
+    }
+    $expected = @($expected | ForEach-Object { $_.ToLowerInvariant() })
+    if (@($expected | Sort-Object -Unique).Count -ne $expected.Count) {
+        throw "The expected member IDs for $GroupName contain a duplicate."
+    }
+
+    $members = @($Member | Where-Object { $_ -is [System.Collections.IDictionary] })
+    $findings = New-Object -TypeName System.Collections.Generic.List[object]
+
+    foreach ($item in $members) {
+        $type = [string]$item['@odata.type']
+        if ($type -cne '#microsoft.graph.user') {
+            $findings.Add((ConvertTo-LabReadbackFinding -Type 'MemberNotUser' -Name $GroupName -Message "A member is '$type', not a user."))
+        }
+    }
+
+    $actual = @($members | ForEach-Object { ([string]$_['id']).ToLowerInvariant() })
+    $missing = @($expected | Where-Object { $actual -notcontains $_ }).Count
+    $extra = @($actual | Where-Object { $expected -notcontains $_ }).Count
+    if ($missing -gt 0) {
+        $findings.Add((ConvertTo-LabReadbackFinding -Type 'MemberMissing' -Name $GroupName -Message "$missing expected member(s) not in the group."))
+    }
+    if ($extra -gt 0) {
+        $findings.Add((ConvertTo-LabReadbackFinding -Type 'MemberUnexpected' -Name $GroupName -Message "$extra member(s) not in the expected list."))
+    }
+
+    return $findings.ToArray()
+}

@@ -83,6 +83,9 @@ jobs:
         shell: pwsh
         env:
           LAB_TRIAL_ACTIVE: ${{ vars.LAB_TRIAL_ACTIVE }}    # unset until T: R-53 tests stay off
+          EMERGENCY_ACCESS_GROUP_ID: ${{ secrets.EMERGENCY_ACCESS_GROUP_ID }}       # repository secret, from T (D6)
+          IT_SECURITY_GROUP_ID: ${{ secrets.IT_SECURITY_GROUP_ID }}                 # repository secret, from T (D6)
+          EMERGENCY_ACCESS_MEMBER_IDS: ${{ secrets.EMERGENCY_ACCESS_MEMBER_IDS }}   # repository secret, from T (D8)
         run: |
           $ErrorActionPreference = 'Stop'
           . ./scripts/GraphFederatedCommon.ps1
@@ -97,6 +100,8 @@ jobs:
               $config.Run.Path = './tests'
               $config.Run.PassThru = $true
               $config.Filter.Tag = 'Graph'
+              # R-53 read-back only once the trial is on: left out (not skipped) before T (D2).
+              if ($env:LAB_TRIAL_ACTIVE -ne 'true') { $config.Filter.ExcludeTag = 'CAReadback' }
               $config.TestResult.Enabled = $true
               $config.TestResult.OutputFormat = 'NUnitXml'
               $config.TestResult.OutputPath = 'GraphTestResults.xml'
@@ -148,8 +153,8 @@ jobs:
         shell: pwsh
         env:
           LAB_TRIAL_ACTIVE: ${{ vars.LAB_TRIAL_ACTIVE }}
-          EMERGENCY_ACCESS_GROUP_ID: ${{ secrets.EMERGENCY_ACCESS_GROUP_ID }}   # environment secret, from T
-          IT_SECURITY_GROUP_ID: ${{ secrets.IT_SECURITY_GROUP_ID }}             # environment secret, from T
+          EMERGENCY_ACCESS_GROUP_ID: ${{ secrets.EMERGENCY_ACCESS_GROUP_ID }}   # repository secret, from T (D6)
+          IT_SECURITY_GROUP_ID: ${{ secrets.IT_SECURITY_GROUP_ID }}             # repository secret, from T (D6)
         run: |
           $ErrorActionPreference = 'Stop'
           . ./scripts/GraphFederatedCommon.ps1
