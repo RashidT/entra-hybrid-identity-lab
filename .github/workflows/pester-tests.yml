@@ -56,10 +56,13 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # graph-tests: reader app, subject ref:refs/heads/main (R-55). No environment.
+  # Runs after ca-deploy (D9): on a manual run it reads back what was just deployed;
+  # on a push ca-deploy is skipped and this job still runs.
   # ---------------------------------------------------------------------------
   graph-tests:
-    needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'   # R-54
+    needs: [test, ca-deploy]
+    # !cancelled() stops the default success() check, which would skip this job whenever ca-deploy is skipped.
+    if: ${{ !cancelled() && needs.test.result == 'success' && (needs.ca-deploy.result == 'success' || needs.ca-deploy.result == 'skipped') && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}   # R-54, D9
     runs-on: windows-latest
     timeout-minutes: 15
     permissions:
@@ -126,9 +129,10 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # ca-deploy: deployer app, subject environment:ca-deploy (R-55). Manual only.
+  # Needs test only (D9): a red read-back must not block the deploy that fixes it.
   # ---------------------------------------------------------------------------
   ca-deploy:
-    needs: [test, graph-tests]
+    needs: test
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'   # R-54, D3
     runs-on: windows-latest
     timeout-minutes: 15
