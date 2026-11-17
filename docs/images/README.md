@@ -105,5 +105,6 @@ Finish
 | `ci-ca-deploy-green.png` | Manual run (`workflow_dispatch`) from `main`, commit `2616e37`: `test`, `graph-tests` and `ca-deploy` all passed. Account name redacted | R-55, R-60 |
 | `ci-ca-deploy-log.png` | The `ca-deploy` step: tenant and client IDs shown as `***`; `LAB_TRIAL_ACTIVE` empty; `aud` PASS; `Token roles: Policy.Read.All, Policy.ReadWrite.ConditionalAccess`; app-only PASS; secrets and certificates 0 on both objects; "Trial not active: deploy skipped (D2)" | R-50, R-51, R-55, R-60 |
 | `ci-r56-refused.png` | Workflow on branch `r56-negative-check` (never merged): `aud` PASS, then the exchange refused with `AADSTS700213`, Entra quoting the subject `…:ref:refs/heads/r56-negative-check`. Owner, owner ID, repo ID, trace ID and correlation ID redacted | R-56 |
+| `ci-ca-deploy-approval.png` | Manual run #40 from `main` (2026-11-17): `test` green, `ca-deploy` waiting at **Review deployments** for the required reviewer, `graph-tests` waiting. Actor redacted | R-55, R-74 |
 
 The `06-Set-UserUPN.ps1 -LogPath` CSV and the output of `05-Update-ADUsers.ps1` are text, so they can be committed as files. Check them for real names or addresses first.
