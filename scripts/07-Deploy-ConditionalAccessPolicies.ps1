@@ -12,7 +12,10 @@
                       whole in one PATCH (Option A); no difference means NoChange
            several -> Failed, and nothing is changed for that policy
       4. Every create and update is read back and compared again; it only counts as done if the
-         read-back matches.
+         read-back matches. A new policy may not be readable by ID for a few seconds after its
+         POST (seen 2026-11-17), so after a create a NotFound read is retried with back-off
+         (2, 4, 8, 16 s, up to -CreateNotFoundWaitSeconds). Any other read error, and a NotFound
+         after an update, fails that policy at once.
     Nothing is ever deleted. A tenant LAB- policy with no definition is reported as NotInRepo and
     left alone. One failing policy does not stop the others; the script ends with a terminating
     error if any policy failed.
@@ -31,6 +34,10 @@
     How many times a create or update is read back before it is reported as Failed.
 .PARAMETER ReadBackDelaySeconds
     Seconds to wait between read-back attempts.
+.PARAMETER CreateNotFoundWaitSeconds
+    After a create, the most seconds in total to wait for the new policy to become readable by ID.
+    Waits double from 2 s and stop before the total passes this value (30 = 2 + 4 + 8 + 16, so five
+    reads). 0 turns the wait off.
 .EXAMPLE
     Connect-MgGraph -Scopes 'Policy.Read.All', 'Policy.ReadWrite.ConditionalAccess' -NoWelcome
     (Get-MgContext).Account
@@ -53,7 +60,10 @@ param(
     [int] $ReadBackAttempts = 3,
 
     [ValidateRange(0, 60)]
-    [int] $ReadBackDelaySeconds = 5
+    [int] $ReadBackDelaySeconds = 5,
+
+    [ValidateRange(0, 120)]
+    [int] $CreateNotFoundWaitSeconds = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,11 +72,36 @@ $ErrorActionPreference = 'Stop'
 
 $policiesUri = 'v1.0/identity/conditionalAccess/policies'
 
+function Test-LabGraphNotFound {
+    <#
+    .SYNOPSIS
+        True when a failed Graph call was a 404 (NotFound). Uses the response status code when the
+        exception carries one, otherwise the message.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Boolean])]
+    param(
+        [Parameter(Mandatory = $true)] [System.Management.Automation.ErrorRecord] $ErrorRecord
+    )
+
+    $response = $ErrorRecord.Exception.PSObject.Properties['Response']
+    if ($response -and $response.Value -and $null -ne $response.Value.PSObject.Properties['StatusCode'] -and $null -ne $response.Value.StatusCode) {
+        return ([int]$response.Value.StatusCode -eq 404)
+    }
+    return ($ErrorRecord.Exception.Message -match '\bNotFound\b')
+}
+
 function Get-LabPolicyReadBackDifference {
     <#
     .SYNOPSIS
         Reads one policy back by ID and returns the top-level keys that still differ.
-        Retries, because a change may take a moment to show.
+    .DESCRIPTION
+        Two separate retries:
+          - a read that succeeds but still differs is retried up to -Attempts times, -DelaySeconds
+            apart, because a change may take a moment to show;
+          - a NotFound read is retried with back-off (2, 4, 8 ... s) while the total wait stays
+            within -NotFoundWaitSeconds. Only a create passes a value above 0.
+        Any other read error throws at once.
     #>
     [CmdletBinding()]
     [OutputType([System.String[]])]
@@ -74,25 +109,38 @@ function Get-LabPolicyReadBackDifference {
         [Parameter(Mandatory = $true)] [System.Collections.IDictionary] $Definition,
         [Parameter(Mandatory = $true)] [string] $PolicyId,
         [Parameter(Mandatory = $true)] [int] $Attempts,
-        [Parameter(Mandatory = $true)] [int] $DelaySeconds
+        [Parameter(Mandatory = $true)] [int] $DelaySeconds,
+        [int] $NotFoundWaitSeconds = 0
     )
 
-    $lastError = ''
-    $difference = @()
-    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-        if ($attempt -gt 1) { Start-Sleep -Seconds $DelaySeconds }
+    $reads = 0
+    $compared = 0
+    $notFoundWaited = 0
+    $notFoundDelay = 2
+    while ($true) {
+        $reads++
         try {
             $actual = Invoke-MgGraphRequest -Method GET -Uri "$policiesUri/$PolicyId" -OutputType HashTable
-            $difference = @(Get-LabPolicyDifference -Definition $Definition -Actual $actual)
-            $lastError = ''
-            if ($difference.Count -eq 0) { return [string[]]@() }
         }
         catch {
-            $lastError = $_.Exception.Message
+            $notFound = Test-LabGraphNotFound -ErrorRecord $_
+            if ($notFound -and ($notFoundWaited + $notFoundDelay) -le $NotFoundWaitSeconds) {
+                Start-Sleep -Seconds $notFoundDelay
+                $notFoundWaited += $notFoundDelay
+                $notFoundDelay *= 2
+                continue
+            }
+            $waited = ''
+            if ($notFoundWaited -gt 0) { $waited = ", $notFoundWaited s waited for NotFound" }
+            throw "Read-back failed after $reads read(s)$($waited): $($_.Exception.Message)"
         }
+
+        $compared++
+        $difference = @(Get-LabPolicyDifference -Definition $Definition -Actual $actual)
+        if ($difference.Count -eq 0) { return [string[]]@() }
+        if ($compared -ge $Attempts) { return [string[]]$difference }
+        Start-Sleep -Seconds $DelaySeconds
     }
-    if ($lastError) { throw "Read-back failed after $Attempts attempt(s): $lastError" }
-    return [string[]]$difference
 }
 
 # ---- Preflight: every file is checked before any Graph call ---------------------------------
@@ -198,7 +246,7 @@ foreach ($item in $definitions) {
                 if (-not $created -or [string]::IsNullOrWhiteSpace([string]$created['id'])) {
                     throw 'Graph did not return the new policy ID.'
                 }
-                $left = @(Get-LabPolicyReadBackDifference -Definition $item.Definition -PolicyId $created['id'] -Attempts $ReadBackAttempts -DelaySeconds $ReadBackDelaySeconds)
+                $left = @(Get-LabPolicyReadBackDifference -Definition $item.Definition -PolicyId $created['id'] -Attempts $ReadBackAttempts -DelaySeconds $ReadBackDelaySeconds -NotFoundWaitSeconds $CreateNotFoundWaitSeconds)
                 if ($left.Count -gt 0) {
                     $result.Action = 'Failed'
                     $result.Detail = "Created, but the read-back still differs in: $($left -join ', ')."

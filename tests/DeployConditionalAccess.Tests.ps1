@@ -135,17 +135,20 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
         # Calls records every Graph request as plain strings. Tests assert on Calls instead of using
         # -ParameterFilter on Body or Uri, which didn't match on the CI runner (Pester 6.2.0, Windows).
         $fake = @{
-            Tenant       = New-Object -TypeName System.Collections.Generic.List[object]
-            Calls        = New-Object -TypeName System.Collections.Generic.List[object]
-            NextId       = 0
-            PageSize     = 0
-            PatchApplies = $true
-            FailPostLike = ''
-            Sleeps       = 0
+            Tenant        = New-Object -TypeName System.Collections.Generic.List[object]
+            Calls         = New-Object -TypeName System.Collections.Generic.List[object]
+            NextId        = 0
+            PageSize      = 0
+            PatchApplies  = $true
+            FailPostLike  = ''
+            Sleeps        = 0
+            SleptFor      = New-Object -TypeName System.Collections.Generic.List[int]
+            NotFoundReads = 0    # the next N reads by ID throw NotFound, as after the real create (2026-11-17)
+            FailReadWith  = ''   # every read by ID throws this message instead
         }
 
         Mock Get-MgContext { [pscustomobject]@{ Account = $null; AppName = 'lab-ca-deployer' } }
-        Mock Start-Sleep { $fake.Sleeps++ }
+        Mock Start-Sleep { $fake.Sleeps++; $fake.SleptFor.Add([int]$Seconds) }
 
         # The fake tenant. GET lists (with optional paging) or reads one; POST creates; PATCH replaces
         # each top-level key sent. Any other method fails the call.
@@ -169,6 +172,11 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
                         return $page
                     }
                     $id = $u.Substring($base.Length + 1)
+                    if ($fake.FailReadWith) { throw $fake.FailReadWith }
+                    if ($fake.NotFoundReads -gt 0) {
+                        $fake.NotFoundReads--
+                        throw 'Response status code does not indicate success: NotFound (Not Found).'
+                    }
                     $found = @($fake.Tenant | Where-Object { $_['id'] -eq $id })
                     if ($found.Count -ne 1) { throw 'Response status code does not indicate success: NotFound (Not Found).' }
                     return (Copy-TestValue -Value $found[0])
@@ -310,6 +318,53 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             $row.Detail | Should -Be 'Forbidden'
             @($result.Output | Where-Object { $_.Action -eq 'Created' }).Count | Should -Be ($script:PolicyCount - 1)
         }
+
+        It 'waits with back-off while a new policy is not readable yet, then reports Created' {
+            $fake.NotFoundReads = 2
+            $result = Invoke-Deploy
+            $result.Threw | Should -BeFalse -Because $result.Error
+            @($result.Output | Where-Object { $_.Action -eq 'Created' }).Count | Should -Be $script:PolicyCount
+            @($fake.SleptFor) -join ',' | Should -Be '2,4' -Because 'two NotFound reads wait 2 s, then 4 s'
+            (Get-FakeCall -Method 'POST').Count | Should -Be $script:PolicyCount -Because 'a slow read never creates twice'
+        }
+
+        It 'reports Failed when a new policy is still NotFound after the wait, without creating it again' {
+            $fake.NotFoundReads = 5
+            $result = Invoke-Deploy
+            $result.Threw | Should -BeTrue
+            $failed = @($result.Output | Where-Object { $_.Action -eq 'Failed' })
+            $failed.Count | Should -Be 1
+            $failed[0].Detail | Should -BeLike 'Read-back failed after 5 read(s), 30 s waited for NotFound: *NotFound*'
+            @($fake.SleptFor) -join ',' | Should -Be '2,4,8,16' -Because 'the default wait is 30 s in total'
+            @($result.Output | Where-Object { $_.Action -eq 'Created' }).Count | Should -Be ($script:PolicyCount - 1)
+            (Get-FakeCall -Method 'POST').Count | Should -Be $script:PolicyCount
+        }
+
+        It 'keeps the total NotFound wait within -CreateNotFoundWaitSeconds' {
+            $fake.NotFoundReads = 3
+            $result = Invoke-Deploy -Parameters @{ CreateNotFoundWaitSeconds = 10 }
+            $result.Threw | Should -BeTrue
+            @($fake.SleptFor) -join ',' | Should -Be '2,4' -Because 'a third wait (8 s) would pass 10 s'
+            (@($result.Output | Where-Object { $_.Action -eq 'Failed' })[0]).Detail | Should -BeLike 'Read-back failed after 3 read(s), 6 s waited for NotFound: *'
+        }
+
+        It 'does not wait for NotFound when -CreateNotFoundWaitSeconds is 0' {
+            $fake.NotFoundReads = 1
+            $result = Invoke-Deploy -Parameters @{ CreateNotFoundWaitSeconds = 0 }
+            $result.Threw | Should -BeTrue
+            $fake.Sleeps | Should -Be 0
+            (@($result.Output | Where-Object { $_.Action -eq 'Failed' })[0]).Detail | Should -BeLike 'Read-back failed after 1 read(s): *'
+        }
+
+        It 'fails at once on a read-back error other than NotFound' {
+            $fake.FailReadWith = 'Response status code does not indicate success: Forbidden (Forbidden).'
+            $result = Invoke-Deploy
+            $result.Threw | Should -BeTrue
+            $failed = @($result.Output | Where-Object { $_.Action -eq 'Failed' })
+            $failed.Count | Should -Be $script:PolicyCount
+            $failed[0].Detail | Should -BeLike 'Read-back failed after 1 read(s): *Forbidden*'
+            $fake.Sleeps | Should -Be 0 -Because 'only NotFound after a create is retried'
+        }
     }
 
     Context 'Update (R-57, Option A)' {
@@ -367,6 +422,18 @@ Describe '07-Deploy-ConditionalAccessPolicies.ps1' {
             @($row).Count | Should -Be 1
             $row.Detail | Should -BeLike '*read-back still differs in: state*'
             $fake.Sleeps | Should -Be 2 -Because 'three attempts wait twice'
+        }
+
+        It 'does not wait for NotFound after an update' {
+            Set-TenantInSync
+            $fake.Tenant[0]['state'] = 'enabled'
+            $fake.NotFoundReads = 1
+            $result = Invoke-Deploy
+            $result.Threw | Should -BeTrue
+            $row = $result.Output | Where-Object { $_.Action -eq 'Failed' }
+            @($row).Count | Should -Be 1
+            $row.Detail | Should -BeLike 'Read-back failed after 1 read(s): *NotFound*'
+            $fake.Sleeps | Should -Be 0 -Because 'the policy existed before the PATCH'
         }
 
         It 'finds a policy on a later page of the list' {
