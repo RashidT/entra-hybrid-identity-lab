@@ -49,17 +49,21 @@ Set up before Phase 3, so the automation runs in a tenant that is already locked
 
 ```
 entra-hybrid-identity-lab/
-├── .github/workflows/pester-tests.yml           # CI: script analysis + unit tests
-├── data/users.csv                               # 100 sample users (no passwords)
+├── .github/workflows/pester-tests.yml           # CI: test (analysis + unit tests), graph-tests (Graph read-back), ca-deploy (manual)
+├── data/
+│   ├── users.csv                                # 100 sample users (no passwords)
+│   └── guid-allowlist.csv                       # Labelled GUIDs the R-74 scan allows
 ├── docs/
 │   ├── REQUIREMENTS.md                          # Testable requirements for this repo
 │   ├── architecture.md
 │   ├── upn-migration.csv                        # UPN migration log, before and after
-│   └── images/                                  # Screenshots and evidence
-├── policies/                                    # Conditional Access definitions, LAB-001 to LAB-004 (report-only, not deployed yet)
+│   └── images/                                  # Screenshots and evidence, indexed in images/README.md
+├── policies/                                    # Conditional Access definitions LAB-001 to LAB-004 (report-only only)
 ├── scripts/
 │   ├── LabCommon.ps1                            # Shared helpers (CSV validation, DN helpers)
 │   ├── ConditionalAccessCommon.ps1              # Shared policy rules for 07 and the Graph tests (check, fill placeholders, compare)
+│   ├── GraphFederatedCommon.ps1                 # CI sign-in with the federated credential, token and app checks, Graph paging
+│   ├── RepoScanCommon.ps1                       # Whole-repo scan rules for tenant values (R-74)
 │   ├── 01-Initialize-OUStructure.ps1            # Creates OU=CorpUsers
 │   ├── 02-Configure-UPNSuffixes.ps1             # Registers a UPN suffix in the forest
 │   ├── 03-BulkImport-Users.ps1                  # Department OUs, groups and users from the CSV
@@ -73,9 +77,14 @@ entra-hybrid-identity-lab/
 │   ├── Scripts.Tests.ps1                        # Mocked tests for scripts 01-06
 │   ├── ConditionalAccess.Tests.ps1              # Shared policy rules and the policies/ JSON files
 │   ├── DeployConditionalAccess.Tests.ps1        # Script 07 against a fake tenant (mocked Graph)
+│   ├── GraphFederatedCommon.Tests.ps1           # Graph paging helper (mocked Graph)
 │   ├── PolicyFiles.Tests.ps1                    # No tenant-specific values in policies/ (R-58)
+│   ├── RepoScan.Tests.ps1                       # No tenant domain or unlisted GUID in any tracked file (R-74)
 │   ├── Graph.Tests.ps1                          # Reads tenant settings through Graph (R-69)
+│   ├── ConditionalAccessReadback.Tests.ps1      # LAB- policies and EmergencyAccess members match the repo (R-53)
 │   └── IdentityLab.Integration.Tests.ps1        # Needs a real domain controller
+├── .gitignore
+├── .gitleaks.toml                               # Same rules, for the one full-history gitleaks scan (R-74)
 ├── PSScriptAnalyzerSettings.psd1
 ├── LICENSE
 └── README.md
